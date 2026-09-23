@@ -2446,6 +2446,35 @@ async function migrateDB(database = db, env = process.env) {
     `ALTER TABLE platform_settings ALTER COLUMN agent_hub_url SET DEFAULT 'https://norafleet.ai'`,
     `UPDATE platform_settings SET agent_hub_url = 'https://norafleet.ai', updated_at = NOW()
        WHERE agent_hub_url = 'https://nora.solomontsao.com'`,
+    // N1: reserve one immutable external identity and create-request key per Nora account.
+    // Owner UUID is trusted integration metadata; user-facing name/email never identifies an agent.
+    `ALTER TABLE agents ADD COLUMN external_id_namespace TEXT`,
+    `ALTER TABLE agents ADD COLUMN external_id UUID`,
+    `ALTER TABLE agents ADD COLUMN external_owner_id UUID`,
+    `ALTER TABLE agents ADD COLUMN create_request_key TEXT`,
+    `ALTER TABLE agents ADD COLUMN create_request_fingerprint TEXT`,
+    `ALTER TABLE agents ADD CONSTRAINT agents_external_identity_complete_check
+       CHECK (
+         (external_id_namespace IS NULL AND external_id IS NULL AND external_owner_id IS NULL)
+         OR (external_id_namespace IS NOT NULL AND external_id IS NOT NULL AND external_owner_id IS NOT NULL)
+       )`,
+    `ALTER TABLE agents ADD CONSTRAINT agents_external_namespace_headmaster_check
+       CHECK (external_id_namespace IS NULL OR external_id_namespace = 'headmaster')`,
+    `ALTER TABLE agents ADD CONSTRAINT agents_create_request_pair_check
+       CHECK (
+         (create_request_key IS NULL AND create_request_fingerprint IS NULL)
+         OR (create_request_key IS NOT NULL AND create_request_fingerprint IS NOT NULL)
+       )`,
+    `ALTER TABLE agents ADD CONSTRAINT agents_create_request_key_nonempty_check
+       CHECK (create_request_key IS NULL OR length(btrim(create_request_key)) > 0)`,
+    `ALTER TABLE agents ADD CONSTRAINT agents_create_request_fingerprint_sha256_check
+       CHECK (create_request_fingerprint IS NULL OR create_request_fingerprint ~ '^[0-9a-f]{64}$')`,
+    `CREATE UNIQUE INDEX agents_external_identity_unique_idx
+       ON agents(user_id, external_id_namespace, external_id)
+       WHERE external_id_namespace IS NOT NULL AND external_id IS NOT NULL AND external_owner_id IS NOT NULL`,
+    `CREATE UNIQUE INDEX agents_create_request_key_unique_idx
+       ON agents(user_id, create_request_key)
+       WHERE create_request_key IS NOT NULL`,
   ];
 
   return runVersionedMigrations(database, migrations, {

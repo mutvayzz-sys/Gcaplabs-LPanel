@@ -131,6 +131,140 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
     expect(firstRun.total).toBeGreaterThan(100);
     expect(firstRun.applied).toBe(firstRun.total);
 
+    const identityColumns = await migrationPool.query(
+      `SELECT column_name, data_type
+         FROM information_schema.columns
+        WHERE table_schema = $1
+          AND table_name = 'agents'
+          AND column_name = ANY($2::text[])
+        ORDER BY column_name`,
+      [
+        schemaName,
+        [
+          "create_request_fingerprint",
+          "create_request_key",
+          "external_id",
+          "external_id_namespace",
+          "external_owner_id",
+        ],
+      ],
+    );
+    expect(identityColumns.rows).toEqual([
+      { column_name: "create_request_fingerprint", data_type: "text" },
+      { column_name: "create_request_key", data_type: "text" },
+      { column_name: "external_id", data_type: "uuid" },
+      { column_name: "external_id_namespace", data_type: "text" },
+      { column_name: "external_owner_id", data_type: "uuid" },
+    ]);
+
+    const identityIndexes = await migrationPool.query(
+      `SELECT indexname, indexdef
+         FROM pg_indexes
+        WHERE schemaname = $1
+          AND tablename = 'agents'
+          AND indexname IN (
+            'agents_external_identity_unique_idx',
+            'agents_create_request_key_unique_idx'
+          )`,
+      [schemaName],
+    );
+    const externalIdentityIndex = identityIndexes.rows.find(
+      (row) => row.indexname === "agents_external_identity_unique_idx",
+    );
+    const createRequestKeyIndex = identityIndexes.rows.find(
+      (row) => row.indexname === "agents_create_request_key_unique_idx",
+    );
+    expect(externalIdentityIndex?.indexdef).toMatch(/UNIQUE INDEX.*\(user_id, external_id_namespace, external_id\)/i);
+    expect(externalIdentityIndex?.indexdef).not.toMatch(/status/i);
+    expect(createRequestKeyIndex?.indexdef).toMatch(/UNIQUE INDEX.*\(user_id, create_request_key\)/i);
+
+    const identityConstraints = await migrationPool.query(
+      `SELECT conname
+         FROM pg_constraint
+        WHERE conrelid = to_regclass('agents')
+          AND contype = 'c'`,
+    );
+    const constraintNames = new Set(identityConstraints.rows.map((row) => row.conname));
+    expect(constraintNames.has("agents_external_identity_complete_check")).toBe(true);
+    expect(constraintNames.has("agents_external_namespace_headmaster_check")).toBe(true);
+    expect(constraintNames.has("agents_create_request_pair_check")).toBe(true);
+    expect(constraintNames.has("agents_create_request_key_nonempty_check")).toBe(true);
+    expect(constraintNames.has("agents_create_request_fingerprint_sha256_check")).toBe(true);
+
+    const externalOwnerId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const insertExternalAgent = ({
+      ownerUserId = userId,
+      externalId = workspaceId,
+      requestKey = "create-key-a",
+      fingerprint = "a".repeat(64),
+      status = "queued",
+    } = {}) =>
+      migrationPool.query(
+        `INSERT INTO agents(
+           user_id, name, status, external_id_namespace, external_id, external_owner_id,
+           create_request_key, create_request_fingerprint
+         ) VALUES($1, 'External identity test', $2, 'headmaster', $3, $4, $5, $6)
+         RETURNING id`,
+        [ownerUserId, status, externalId, externalOwnerId, requestKey, fingerprint],
+      );
+
+    await insertExternalAgent();
+    await expect(
+      insertExternalAgent({ status: "deleted", requestKey: "create-key-b", fingerprint: "b".repeat(64) }),
+    ).rejects.toMatchObject({ code: "23505" });
+    await expect(
+      insertExternalAgent({
+        externalId: "22222222-2222-4222-8222-222222222222",
+        fingerprint: "c".repeat(64),
+      }),
+    ).rejects.toMatchObject({ code: "23505" });
+
+    const secondUser = await migrationPool.query(
+      `INSERT INTO users(email, role, name)
+       VALUES($1, 'user', 'Second migration user') RETURNING id`,
+      [`second-migration-${Date.now()}@example.test`],
+    );
+    await expect(
+      insertExternalAgent({ ownerUserId: secondUser.rows[0].id, requestKey: "second-account-key" }),
+    ).resolves.toMatchObject({ rowCount: 1 });
+
+    await expect(
+      migrationPool.query(
+        `INSERT INTO agents(user_id, external_id_namespace)
+         VALUES($1, 'headmaster')`,
+        [userId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      migrationPool.query(
+        `INSERT INTO agents(user_id, create_request_key)
+         VALUES($1, 'missing-fingerprint')`,
+        [userId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      migrationPool.query(
+        `INSERT INTO agents(user_id, create_request_key, create_request_fingerprint)
+         VALUES($1, 'invalid-fingerprint', 'not-a-sha256')`,
+        [userId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      migrationPool.query(
+        `INSERT INTO agents(
+           user_id, external_id_namespace, external_id, external_owner_id
+         ) VALUES($1, 'other', $2, $3)`,
+        [userId, "33333333-3333-4333-8333-333333333333", externalOwnerId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      migrationPool.query(
+        `INSERT INTO agents(user_id, create_request_key, create_request_fingerprint)
+         VALUES($1, '   ', $2)`,
+        [userId, "d".repeat(64)],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+
     const backupKinds = await migrationPool.query(
       `SELECT name, kind FROM backups WHERE name LIKE 'Legacy %' ORDER BY name`,
     );
