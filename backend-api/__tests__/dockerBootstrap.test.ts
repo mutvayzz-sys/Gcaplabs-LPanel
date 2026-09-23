@@ -980,6 +980,41 @@ describe("Provisioner backends", () => {
     expect(files.some((file) => file.name === "opt/openclaw-runtime/start.sh")).toBe(false);
   });
 
+  it("initializes Headmaster integration metadata in an empty Hermes managed-env volume", async () => {
+    const dockerBackend = new DockerBackend();
+    dockerBackend.docker = { getContainer: jest.fn(() => ({})) };
+    dockerBackend._readManagedEnvState = jest.fn().mockRejectedValue(new Error("unexpected read"));
+    dockerBackend._readContainerFile = jest.fn().mockRejectedValue(new Error("unexpected read"));
+    dockerBackend._putBootstrapFiles = jest.fn().mockResolvedValue(undefined);
+
+    const integrationEnv = {
+      HEADMASTER_OWNER_ID: "33333333-3333-4333-8333-333333333333",
+      HEADMASTER_WORKSPACE_ID: "22222222-2222-4222-8222-222222222222",
+      HEADMASTER_MEMORY_BANK_ID: "hermes-u-33333333_3333_4333_8333_333333333333",
+      HEADMASTER_MEMORY_GATEWAY_URL: "http://headmaster-memory-gateway:8080",
+    };
+    await dockerBackend.updateEnv("container-1", integrationEnv, {
+      managedEnvNames: Object.keys(integrationEnv),
+      replaceManagedState: true,
+      initializeManagedState: true,
+      runtimeFamily: "hermes",
+    });
+
+    expect(dockerBackend._readManagedEnvState).not.toHaveBeenCalled();
+    expect(dockerBackend._readContainerFile).not.toHaveBeenCalled();
+    const files = dockerBackend._putBootstrapFiles.mock.calls[0][1];
+    const stateFile = files.find((file) => file.name === "opt/nora-managed-env/state.json");
+    const profileFile = files.find((file) => file.name === "etc/profile.d/nora-managed-env.sh");
+    expect(stateFile.mode).toBe(0o600);
+    expect(JSON.parse(stateFile.content)).toEqual({
+      version: 1,
+      managedNames: Object.keys(integrationEnv).sort(),
+      values: integrationEnv,
+    });
+    expect(profileFile.content).toContain("/opt/nora-managed-env/apply.sh");
+    expect(profileFile.content).not.toContain("33333333-3333-4333-8333-333333333333");
+  });
+
   it("keeps Docker creation metadata and generated bootstrap scripts credential-free", async () => {
     const dockerBackend = new DockerBackend();
     const createdContainer = {

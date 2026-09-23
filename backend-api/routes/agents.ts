@@ -123,6 +123,14 @@ const {
   buildReplacementDeploymentJob,
   enqueueReplacementDeployment: enqueueReplacementDeploymentWithLock,
 } = require("../agentProvisionLock");
+const {
+  HEADMASTER_ENV_NAMES,
+  getAgentManagedConfigStatus,
+  mutateAgentManagedConfig,
+  normalizeSecretOverridePatch,
+  retryAgentManagedConfigJob,
+  validateHeadmasterIntegrationConfig,
+} = require("../agentManagedConfig");
 
 const router = express.Router();
 router.use(createMutationFailureAuditMiddleware("agent"));
@@ -944,6 +952,134 @@ function agentAuditMetadata(req, agent, extra = {}) {
     }),
   );
 }
+
+function managedConfigErrorResponse(error) {
+  const status = Number(error?.statusCode);
+  if (Number.isInteger(status) && status >= 400 && status < 500) {
+    return {
+      status,
+      body: { error: String(error.message || "Managed configuration request was rejected"), code: error.code || "managed_config_rejected" },
+    };
+  }
+  if (status === 503 && error?.code === "managed_config_queue_failed") {
+    return { status: 503, body: { error: error.message, code: error.code } };
+  }
+  return { status: 500, body: { error: "Managed configuration update failed", code: "managed_config_update_failed" } };
+}
+
+router.get(
+  "/:id/managed-config",
+  asyncHandler(async (req, res) => {
+    const agent = await findAccessibleAgentForRequest(req, req.params.id, "viewer");
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+    res.json(await getAgentManagedConfigStatus(agent.id));
+  }),
+);
+
+router.patch(
+  "/:id/secret-overrides",
+  asyncHandler(async (req, res) => {
+    const agent = await findAccessibleAgentForRequest(req, req.params.id, "editor");
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+    const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+    const allowed = new Set(["expected_revision", "set", "delete"]);
+    if (Object.keys(body).some((key) => !allowed.has(key))) {
+      return res.status(400).json({ error: "Only expected_revision, set, and delete are accepted", code: "invalid_secret_override_patch" });
+    }
+    let patch;
+    try {
+      patch = normalizeSecretOverridePatch({ set: body.set, delete: body.delete });
+    } catch (error) {
+      const response = managedConfigErrorResponse(error);
+      return res.status(response.status).json(response.body);
+    }
+    try {
+      const result = await mutateAgentManagedConfig({
+        agentId: agent.id,
+        expectedRevision: body.expected_revision,
+        secretPatch: patch,
+      });
+      res.locals.auditContext = agentAuditMetadata(req, agent, {
+        managedConfig: {
+          kind: "secret_overrides",
+          keyNames: result.key_names,
+          desiredRevision: result.desired_revision,
+          jobId: result.job_id,
+        },
+      });
+      await Promise.resolve(monitoring.logEvent(
+        "agent_secret_overrides_updated",
+        "Managed agent secret overrides updated",
+        res.locals.auditContext,
+      )).catch(() => {});
+      res.json(result);
+    } catch (error) {
+      const response = managedConfigErrorResponse(error);
+      return res.status(response.status).json(response.body);
+    }
+  }),
+);
+
+router.patch(
+  "/:id/integrations/headmaster",
+  asyncHandler(async (req, res) => {
+    if (!req.user || req.user.role !== "admin" || req.apiKey) {
+      return res.status(403).json({ error: "Administrator session required", code: "session_required" });
+    }
+    const agent = await findAccessibleAgentForRequest(req, req.params.id, "editor");
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+    const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+    const allowed = new Set(["expected_revision", "owner_uuid", "workspace_uuid", "memory_bank_id", "memory_gateway_url"]);
+    if (Object.keys(body).some((key) => !allowed.has(key))) {
+      return res.status(400).json({ error: "Only the allowlisted Headmaster integration fields are accepted", code: "invalid_headmaster_integration_config" });
+    }
+    const config = {
+      owner_uuid: body.owner_uuid,
+      workspace_uuid: body.workspace_uuid,
+      memory_bank_id: body.memory_bank_id,
+      memory_gateway_url: body.memory_gateway_url,
+    };
+    try {
+      const result = await mutateAgentManagedConfig({
+        agentId: agent.id,
+        expectedRevision: body.expected_revision,
+        headmasterIntegrationConfig: config,
+      });
+      res.locals.auditContext = agentAuditMetadata(req, agent, {
+        managedConfig: {
+          kind: "headmaster_integration",
+          keyNames: result.key_names,
+          desiredRevision: result.desired_revision,
+          jobId: result.job_id,
+        },
+      });
+      await Promise.resolve(monitoring.logEvent(
+        "agent_headmaster_integration_updated",
+        "Headmaster integration configuration updated",
+        res.locals.auditContext,
+      )).catch(() => {});
+      res.json(result);
+    } catch (error) {
+      const response = managedConfigErrorResponse(error);
+      return res.status(response.status).json(response.body);
+    }
+  }),
+);
+
+router.post(
+  "/:id/managed-config/retry",
+  asyncHandler(async (req, res) => {
+    const agent = await findAccessibleAgentForRequest(req, req.params.id, "editor");
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+    try {
+      await retryAgentManagedConfigJob(agent.id);
+      return res.json(await getAgentManagedConfigStatus(agent.id));
+    } catch (error) {
+      const response = managedConfigErrorResponse(error);
+      return res.status(response.status).json(response.body);
+    }
+  }),
+);
 
 // Get the gateway control UI URL (published host port for direct browser access)
 router.get(
@@ -2198,7 +2334,9 @@ router.post("/deploy", async (req, res) => {
     if (!requireSessionForRemoteDockerPlacement(req, res, runtimeFields)) return;
 
     const hasExternalCreateFields =
-      requestBody.external_identity !== undefined || requestBody.idempotency_key !== undefined;
+      requestBody.external_identity !== undefined ||
+      requestBody.idempotency_key !== undefined ||
+      requestBody.headmaster_integration_config !== undefined;
     let externalCreate = null;
     if (hasExternalCreateFields) {
       if (req.apiKey || req.user?.role !== "admin") {
@@ -2249,10 +2387,29 @@ router.post("/deploy", async (req, res) => {
         return res.status(400).json({ error: error.message });
       }
 
+      let headmasterIntegrationConfig = null;
+      if (requestBody.headmaster_integration_config !== undefined) {
+        try {
+          headmasterIntegrationConfig = validateHeadmasterIntegrationConfig(
+            requestBody.headmaster_integration_config,
+            {
+              ownerUuid: identity.owner_uuid,
+              workspaceUuid: identity.external_id,
+            },
+          );
+        } catch (error) {
+          return res.status(error.statusCode || 400).json({
+            error: error.message || "Headmaster integration config was rejected",
+            code: error.code || "invalid_headmaster_integration_config",
+          });
+        }
+      }
+
       externalCreate = {
         requestKey,
         identity,
         fingerprint: fingerprintExternalAgentIdentity(identity),
+        headmasterIntegrationConfig,
       };
 
       const existing = await createOrReuseExternalAgent({
@@ -2378,6 +2535,7 @@ router.post("/deploy", async (req, res) => {
           deployTarget: runtimeFields.deploy_target,
           executionTargetId: runtimeFields.execution_target_id,
           sandboxProfile: runtimeFields.sandbox_profile,
+          headmasterIntegrationConfig: externalCreate.headmasterIntegrationConfig,
         },
         jobPayloadForAgent: (externalAgent) => ({
           id: externalAgent.id,
@@ -2398,6 +2556,7 @@ router.post("/deploy", async (req, res) => {
           migration_draft_id: null,
           clawhub_skills: clawhubSkills,
           hermes_skills: hermesSkills,
+          managed_config_revision: externalCreate.headmasterIntegrationConfig ? 1 : 0,
         }),
       });
       const agent = externalResult.agent;

@@ -4,6 +4,42 @@
 
 const db = require("./db");
 const { decrypt, encrypt, ensureEncryptionConfigured } = require("./crypto");
+const ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const RESERVED_ENV_NAMES = new Set([
+  "API_SERVER_ENABLED",
+  "API_SERVER_HOST",
+  "API_SERVER_KEY",
+  "API_SERVER_PORT",
+  "AWS_EC2_METADATA_DISABLED",
+  "GATEWAY_HEALTH_URL",
+  "HOME",
+  "HERMES_HOME",
+  "MESSAGING_CWD",
+  "TERMINAL_CWD",
+]);
+const RESERVED_ENV_PREFIXES = [
+  "AGENT_",
+  "HEADMASTER_",
+  "HERMES_DASHBOARD_BASIC_AUTH_",
+  "NORA_",
+  "API_SERVER_",
+];
+
+function isReservedSecretOverrideName(name) {
+  return RESERVED_ENV_NAMES.has(name) || RESERVED_ENV_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+function assertSafeSecretOverrideNames(names = []) {
+  for (const name of names) {
+    if (typeof name !== "string" || !ENVIRONMENT_KEY_PATTERN.test(name)) {
+      throw new TypeError("Agent secret overrides contain an invalid environment name");
+    }
+    if (isReservedSecretOverrideName(name)) {
+      throw new TypeError("Agent secret overrides contain a Nora-reserved environment name");
+    }
+  }
+  return names;
+}
 
 function normalizeOverrideKey(rawKey) {
   const normalized = String(rawKey || "")
@@ -27,11 +63,24 @@ function normalizeOverrideValue(rawValue) {
  * @returns {Object} Normalized key/value map.
  */
 function normalizeOverrideEntries(rawEntries = {}) {
-  const entries = Object.entries(rawEntries || {})
-    .map(([key, value]) => [normalizeOverrideKey(key), normalizeOverrideValue(value)])
-    .filter(([key, value]) => key && value != null);
-
-  return Object.fromEntries(entries);
+  const normalized = Object.create(null);
+  const source = rawEntries && typeof rawEntries === "object" && !Array.isArray(rawEntries)
+    ? Object.entries(rawEntries)
+    : [];
+  for (const [rawKey, rawValue] of source) {
+    const key = normalizeOverrideKey(rawKey);
+    const value = normalizeOverrideValue(rawValue);
+    if (!key || value == null) continue;
+    if (!ENVIRONMENT_KEY_PATTERN.test(key)) {
+      throw new TypeError("Secret override names must be valid environment variable names");
+    }
+    if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+      throw new TypeError("Agent secret override names collide after normalization");
+    }
+    normalized[key] = value;
+  }
+  assertSafeSecretOverrideNames(Object.keys(normalized));
+  return normalized;
 }
 
 /**
@@ -41,8 +90,8 @@ function normalizeOverrideEntries(rawEntries = {}) {
  * @param {Object} [options={}] - Whether stored values should be decrypted.
  * @returns {Promise<Object>} Environment override map.
  */
-async function listAgentSecretOverrides(agentId, { decryptValues = false } = {}) {
-  const result = await db.query(
+async function listAgentSecretOverrides(agentId, { decryptValues = false, queryable = db } = {}) {
+  const result = await queryable.query(
     `SELECT env_key, env_value
        FROM agent_secret_overrides
       WHERE agent_id = $1
@@ -53,7 +102,7 @@ async function listAgentSecretOverrides(agentId, { decryptValues = false } = {})
   return result.rows.reduce((acc, row) => {
     acc[row.env_key] = decryptValues ? decrypt(row.env_value) : row.env_value;
     return acc;
-  }, {});
+  }, Object.create(null));
 }
 
 async function getAgentSecretEnvVars(agentId) {
@@ -61,40 +110,53 @@ async function getAgentSecretEnvVars(agentId) {
 }
 
 /**
- * Replace all overrides by deleting stored rows and sequentially inserting
- * normalized encrypted values; a failure can leave a partial replacement.
+ * Replace all overrides atomically, encrypting each value before persistence.
+ * When a transaction client is supplied, the caller owns commit/rollback.
  *
  * @param {string} agentId - Agent whose overrides should be replaced.
  * @param {Object} [rawEntries={}] - Plaintext overrides to normalize and encrypt.
- * @returns {Promise<Object>} Normalized plaintext map supplied by the caller.
+ * @returns {Promise<Object>} Normalized override map used by the migration caller.
  */
-async function replaceAgentSecretOverrides(agentId, rawEntries = {}) {
+async function replaceAgentSecretOverrides(agentId, rawEntries = {}, { queryable = null } = {}) {
   const normalized = normalizeOverrideEntries(rawEntries);
 
-  if (Object.keys(normalized).length === 0) {
-    await db.query("DELETE FROM agent_secret_overrides WHERE agent_id = $1", [agentId]);
-    return {};
+  const ownsClient = !queryable;
+  const client = queryable || (await db.connect());
+  let transactionOpen = false;
+  try {
+    if (ownsClient) {
+      await client.query("BEGIN");
+      transactionOpen = true;
+    }
+    if (Object.keys(normalized).length > 0) {
+      ensureEncryptionConfigured("Agent secret override storage");
+    }
+    await client.query("DELETE FROM agent_secret_overrides WHERE agent_id = $1", [agentId]);
+    for (const [envKey, envValue] of Object.entries(normalized)) {
+      await client.query(
+        `INSERT INTO agent_secret_overrides(agent_id, env_key, env_value)
+         VALUES($1, $2, $3)`,
+        [agentId, envKey, encrypt(envValue)],
+      );
+    }
+    if (transactionOpen) {
+      await client.query("COMMIT");
+      transactionOpen = false;
+    }
+    return { ...normalized };
+  } catch (error) {
+    if (transactionOpen) await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    if (ownsClient) client.release();
   }
-
-  ensureEncryptionConfigured("Agent secret override storage");
-  const keys = Object.keys(normalized);
-
-  await db.query("DELETE FROM agent_secret_overrides WHERE agent_id = $1", [agentId]);
-
-  for (const [envKey, envValue] of Object.entries(normalized)) {
-    await db.query(
-      `INSERT INTO agent_secret_overrides(agent_id, env_key, env_value)
-       VALUES($1, $2, $3)`,
-      [agentId, envKey, encrypt(envValue)],
-    );
-  }
-
-  return Object.fromEntries(keys.map((key) => [key, normalized[key]]));
 }
 
 module.exports = {
   getAgentSecretEnvVars,
   listAgentSecretOverrides,
+  assertSafeSecretOverrideNames,
+  isReservedSecretOverrideName,
   normalizeOverrideEntries,
   replaceAgentSecretOverrides,
 };

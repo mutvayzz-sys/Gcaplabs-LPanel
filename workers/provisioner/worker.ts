@@ -28,7 +28,11 @@ const {
   runtimeSelectionIssue,
 } = require("../../agent-runtime/lib/backendCatalog");
 const { buildAgentRuntimeFields } = require("../../agent-runtime/lib/agentRuntimeFields");
-const { getAgentSecretEnvVars } = require("../../backend-api/agentSecretOverrides");
+const {
+  buildAgentManagedConfigRuntimeEnv,
+  getAgentManagedConfigSnapshot,
+  markAgentManagedConfigFailed,
+} = require("../../backend-api/agentManagedConfig");
 const {
   getDeploymentProvider,
   getManagedProviderEnvNames,
@@ -4551,9 +4555,9 @@ const worker = new Worker(
         throw error;
       }
 
-      // Runtime creation is deliberately credential-neutral. Provider and
-      // integration state is fetched again and staged only after the runtime is
-      // reachable, while the shared mutation lock is held through finalization.
+      // Provider credentials stay separate from the runtime bootstrap. Nora
+      // loads its encrypted override set and trusted Headmaster metadata before
+      // create(), then stages them only through the existing managed worker.
       const defaultLlmProvider = await fetchDeploymentProvider(ownerUserId, llmProviderId);
       const bootstrappedProviderFingerprint = null;
       const builtInDemoActivation = isBuiltInDemoActivation({
@@ -4562,23 +4566,32 @@ const worker = new Worker(
         llmProviderId,
         defaultProvider: defaultLlmProvider,
       });
-      let agentSecretEnvVars = {};
+      let managedRuntimeConfig;
       try {
-        agentSecretEnvVars = normalizeEnvValueMap(await getAgentSecretEnvVars(id));
-        if (Object.keys(agentSecretEnvVars).length > 0) {
-          console.log(
-            `[provisioner] Injecting ${Object.keys(agentSecretEnvVars).length} imported env override(s) for agent ${id}`,
-          );
-        }
-      } catch (e) {
-        console.warn(
-          `[provisioner] Failed to fetch agent secret overrides for agent ${id}:`,
-          e.message,
+        const managedConfigSnapshot = await getAgentManagedConfigSnapshot(id);
+        managedRuntimeConfig = buildAgentManagedConfigRuntimeEnv(managedConfigSnapshot, {
+          externalIdNamespace: agentRow.external_id_namespace,
+          ownerUuid: agentRow.external_owner_id,
+          workspaceUuid: agentRow.external_id,
+          allowedGatewayUrl: process.env.HEADMASTER_MEMORY_GATEWAY_URL,
+        });
+      } catch {
+        const error = new Error("Unable to load Nora-managed runtime configuration");
+        error.code = "MANAGED_CONFIG_LOAD_FAILED";
+        throw error;
+      }
+      const agentSecretEnvVars = normalizeEnvValueMap(managedRuntimeConfig.secretOverrides);
+      const headmasterIntegrationEnv = managedRuntimeConfig.headmasterIntegrationEnv;
+      const managedConfigRevision = managedRuntimeConfig.desiredRevision;
+      if (Object.keys(agentSecretEnvVars).length > 0) {
+        console.log(
+          `[provisioner] Injecting ${Object.keys(agentSecretEnvVars).length} managed env override(s) for agent ${id}`,
         );
       }
 
       const credentialManagedEnvNames = buildCredentialManagedEnvNames({
         runtimeFamily: resolvedRuntimeFields.runtime_family,
+        integrationEnvNames: managedRuntimeConfig.integrationEnvNames,
         mcpEnabledIds: agentRow.mcp_servers,
         preservedEnvNames: Object.keys(agentSecretEnvVars),
       });
@@ -4752,6 +4765,7 @@ const worker = new Worker(
                 ? { NEMOCLAW_MODEL: model }
                 : {}),
               ...agentSecretEnvVars,
+              ...headmasterIntegrationEnv,
             },
           });
         const createPromise = usesLocalDockerPublishedPort
@@ -5153,6 +5167,7 @@ const worker = new Worker(
                         name,
                         backend: resolvedBackend,
                         host,
+                        managedConfigRevision,
                       }),
                     ),
                 })
@@ -5165,6 +5180,7 @@ const worker = new Worker(
                 name,
                 backend: resolvedBackend,
                 host,
+                managedConfigRevision,
               }),
             ),
         });
@@ -5347,6 +5363,7 @@ worker.on("failed", async (job, err) => {
         "UPDATE deployments SET status = 'failed' WHERE agent_id = $1 AND status IN ('queued', 'deploying')",
         [job.data.id],
       );
+      await markAgentManagedConfigFailed(db, job.data.id, job.data.managed_config_revision);
       await db.query("INSERT INTO events(type, message, metadata) VALUES($1, $2, $3)", [
         "agent_deploy_dlq",
         unrecoverable

@@ -43,6 +43,7 @@ export interface ExternalAgentCreateFields {
   deployTarget: string;
   executionTargetId: string;
   sandboxProfile: string;
+  headmasterIntegrationConfig?: Record<string, string> | null;
 }
 
 export interface ExternalAgentProvisioningInput {
@@ -220,6 +221,21 @@ async function createDeploymentOperation(
   return operation;
 }
 
+async function seedHeadmasterIntegrationConfig(
+  client: TransactionClient,
+  agentId: string,
+  config: Record<string, string> | null,
+): Promise<void> {
+  if (!config) return;
+  await client.query(
+    `INSERT INTO agent_managed_config(
+       agent_id, desired_revision, applied_revision, headmaster_integration_config
+     ) VALUES($1, 1, 0, $2::jsonb)
+     ON CONFLICT(agent_id) DO NOTHING`,
+    [agentId, JSON.stringify(config)],
+  );
+}
+
 function conflictOnChangedRequest(): ExternalAgentProvisioningConflict {
   return new ExternalAgentProvisioningConflict(
     "The idempotency key was already used with different immutable request inputs",
@@ -326,7 +342,18 @@ export async function createOrReuseExternalAgent(
           );
           agent = (insertResult.rows[0] as AgentRow | undefined) || null;
           if (!agent) throw new Error("Nora did not return the created external agent");
+          await seedHeadmasterIntegrationConfig(
+            client,
+            String(agent.id),
+            createFields.headmasterIntegrationConfig || null,
+          );
           operation = await createDeploymentOperation(client, agent, jobPayloadForAgent);
+          if (createFields.headmasterIntegrationConfig) {
+            await client.query(
+              "UPDATE agent_managed_config SET last_job_id = $2, updated_at = NOW() WHERE agent_id = $1",
+              [agent.id, operation.queue_job_id],
+            );
+          }
           await insertRequestMapping(
             client,
             identity,

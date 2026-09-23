@@ -585,6 +585,75 @@ test("deleted or replaced runtimes cannot be finalized", async () => {
   );
 });
 
+test("managed revision is marked applied in the same transaction that activates its runtime", async () => {
+  const calls = [];
+  const client = {
+    query: async (sql, params = []) => {
+      const normalized = String(sql).trim();
+      calls.push({ sql: normalized, params });
+      if (normalized === "BEGIN" || normalized === "COMMIT") return { rows: [] };
+      if (normalized.startsWith("UPDATE agents")) return { rows: [{ id: "agent-1" }] };
+      if (normalized.startsWith("UPDATE deployments")) return { rows: [{ agent_id: "agent-1" }] };
+      if (normalized.startsWith("UPDATE agent_managed_config")) return { rowCount: 1, rows: [] };
+      if (normalized.startsWith("INSERT INTO events")) return { rows: [] };
+      throw new Error(`Unexpected SQL during managed revision finalization: ${normalized}`);
+    },
+    release: () => calls.push({ sql: "RELEASE" }),
+  };
+
+  await assert.doesNotReject(finalizeProvisionedDeployment(
+    { connect: async () => client },
+    {
+      agentId: "agent-1",
+      containerId: "runtime-1",
+      name: "Demo Agent",
+      backend: "docker",
+      managedConfigRevision: 5,
+    },
+  ));
+
+  const appliedIndex = calls.findIndex(({ sql }) => sql.startsWith("UPDATE agent_managed_config"));
+  const eventIndex = calls.findIndex(({ sql }) => sql.startsWith("INSERT INTO events"));
+  assert.ok(appliedIndex > 0);
+  assert.ok(eventIndex > appliedIndex);
+  assert.deepEqual(calls[appliedIndex].params, ["agent-1", 5]);
+  assert.ok(calls[appliedIndex].sql.includes("desired_revision = $2"));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+  assert.equal(calls.at(-1).sql, "RELEASE");
+});
+
+test("managed revision mismatch rolls back runtime activation instead of marking stale state applied", async () => {
+  const calls = [];
+  const client = {
+    query: async (sql, params = []) => {
+      const normalized = String(sql).trim();
+      calls.push({ sql: normalized, params });
+      if (normalized === "BEGIN" || normalized === "ROLLBACK") return { rows: [] };
+      if (normalized.startsWith("UPDATE agents")) return { rows: [{ id: "agent-1" }] };
+      if (normalized.startsWith("UPDATE deployments")) return { rows: [{ agent_id: "agent-1" }] };
+      if (normalized.startsWith("UPDATE agent_managed_config")) return { rowCount: 0, rows: [] };
+      throw new Error(`Unexpected SQL during stale managed revision finalization: ${normalized}`);
+    },
+    release: () => calls.push({ sql: "RELEASE" }),
+  };
+
+  await assert.rejects(finalizeProvisionedDeployment(
+    { connect: async () => client },
+    {
+      agentId: "agent-1",
+      containerId: "runtime-1",
+      name: "Demo Agent",
+      backend: "docker",
+      managedConfigRevision: 4,
+    },
+  ), /managed configuration revision changed/i);
+
+  assert.equal(calls.some(({ sql }) => sql === "ROLLBACK"), true);
+  assert.equal(calls.some(({ sql }) => sql === "COMMIT"), false);
+  assert.equal(calls.some(({ sql }) => sql.startsWith("INSERT INTO events")), false);
+  assert.equal(calls.at(-1).sql, "RELEASE");
+});
+
 // #406: a session-level advisory lock is released automatically when its
 // connection drops, so a crashed worker frees it. What it does not survive is a
 // live worker whose guarded work never returns — the session sits idle while

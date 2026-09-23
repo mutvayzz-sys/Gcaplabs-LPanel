@@ -2515,6 +2515,18 @@ async function migrateDB(database = db, env = process.env) {
         WHERE agents.create_request_key IS NOT NULL
           AND agents.create_request_fingerprint IS NOT NULL
        ON CONFLICT (user_id, request_key) DO NOTHING`,
+    // N2: secrets remain encrypted in agent_secret_overrides; this row tracks the
+    // non-secret integration config and the revision actually applied by a worker.
+    `CREATE TABLE IF NOT EXISTS agent_managed_config (
+       agent_id UUID PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+       desired_revision INTEGER NOT NULL DEFAULT 0 CHECK (desired_revision >= 0),
+       applied_revision INTEGER NOT NULL DEFAULT 0 CHECK (applied_revision >= 0 AND applied_revision <= desired_revision),
+       headmaster_integration_config JSONB,
+       last_job_id TEXT,
+       last_error TEXT,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`,
   ];
 
   return runVersionedMigrations(database, migrations, {

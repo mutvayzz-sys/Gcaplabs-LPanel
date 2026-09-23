@@ -104,6 +104,46 @@ describe("external agent provisioning transaction", () => {
     expect(client.release).toHaveBeenCalledTimes(1);
   });
 
+  it("seeds Headmaster managed config in the same external-agent create transaction", async () => {
+    const headmasterIntegrationConfig = {
+      owner_uuid: identity.owner_uuid,
+      workspace_uuid: identity.external_id,
+      memory_bank_id: `hermes-u-${identity.owner_uuid.replace(/-/g, "_")}`,
+      memory_gateway_url: "http://headmaster-memory-gateway:8080",
+    };
+    const { pool, client } = makePool([
+      { rows: [] }, // idempotency mapping
+      { rows: [] }, // legacy direct mapping
+      { rows: [] }, // external identity
+      { rows: [agent] }, // agent insert
+      { rows: [] }, // managed config seed
+      { rows: [operation] }, // deployment/outbox insert
+      { rows: [] }, // managed config last job id
+      { rows: [{ request_key: "create-request-a" }] }, // request mapping insert
+    ]);
+
+    await createOrReuseExternalAgent(input(pool, {
+      createFields: { ...createFields, headmasterIntegrationConfig },
+      jobPayloadForAgent: (row) => ({ id: row.id, managed_config_revision: 1 }),
+    }));
+
+    const sql = client.query.mock.calls.map(([statement]) => String(statement).replace(/\s+/g, " ").trim());
+    const seed = sql.findIndex((statement) => statement.startsWith("INSERT INTO agent_managed_config"));
+    const operationInsert = sql.findIndex((statement) => statement.startsWith("INSERT INTO deployments("));
+    const jobPointer = sql.findIndex((statement) => statement.startsWith("UPDATE agent_managed_config SET last_job_id"));
+    const requestMapping = sql.findIndex((statement) => statement.startsWith("INSERT INTO external_agent_create_requests"));
+    expect(seed).toBeGreaterThan(-1);
+    expect(operationInsert).toBeGreaterThan(seed);
+    expect(jobPointer).toBeGreaterThan(operationInsert);
+    expect(requestMapping).toBeGreaterThan(jobPointer);
+    expect(sql.indexOf("COMMIT")).toBeGreaterThan(requestMapping);
+    const seedCall = client.query.mock.calls.find(([statement]) => String(statement).startsWith("INSERT INTO agent_managed_config"));
+    expect(seedCall[1]).toEqual([
+      agent.id,
+      JSON.stringify(headmasterIntegrationConfig),
+    ]);
+  });
+
   it("returns the original agent and operation for an identical retry", async () => {
     const { pool, client } = makePool([
       {

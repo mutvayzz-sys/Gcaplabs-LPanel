@@ -1,6 +1,7 @@
 // @ts-nocheck
 const crypto = require("crypto");
 const { startAdvisoryLockHoldWatchdog } = require("../../backend-api/lib/advisoryLocks.ts");
+const { markAgentManagedConfigApplied } = require("../../backend-api/agentManagedConfig");
 
 function normalizeProviderConfig(config) {
   if (typeof config !== "string") return config ?? null;
@@ -228,7 +229,7 @@ async function persistProvisionedRuntimeMetadata(
 
 async function finalizeProvisionedDeployment(
   queryable,
-  { agentId, containerId, name, backend, host } = {},
+  { agentId, containerId, name, backend, host, managedConfigRevision = 0 } = {},
 ) {
   const ownsClient = typeof queryable?.connect === "function";
   const client = ownsClient ? await queryable.connect() : queryable;
@@ -263,6 +264,13 @@ async function finalizeProvisionedDeployment(
     );
     if (!deploymentUpdate.rows[0]) {
       throw new Error(`Deployment ${agentId} was not in deploying state during finalization`);
+    }
+
+    if (managedConfigRevision > 0) {
+      const applied = await markAgentManagedConfigApplied(client, agentId, managedConfigRevision);
+      if (!applied) {
+        throw new Error("The managed configuration revision changed before runtime activation completed");
+      }
     }
 
     await client.query("INSERT INTO events(type, message, metadata) VALUES($1, $2, $3)", [

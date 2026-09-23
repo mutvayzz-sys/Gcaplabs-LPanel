@@ -284,6 +284,17 @@ CREATE TABLE IF NOT EXISTS agent_secret_overrides (
 CREATE INDEX IF NOT EXISTS idx_agent_secret_overrides_agent
   ON agent_secret_overrides(agent_id, env_key);
 
+CREATE TABLE IF NOT EXISTS agent_managed_config (
+  agent_id UUID PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+  desired_revision INTEGER NOT NULL DEFAULT 0 CHECK (desired_revision >= 0),
+  applied_revision INTEGER NOT NULL DEFAULT 0 CHECK (applied_revision >= 0 AND applied_revision <= desired_revision),
+  headmaster_integration_config JSONB,
+  last_job_id TEXT,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS hermes_runtime_state (
   agent_id UUID PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
   model_config JSONB DEFAULT '{}',
