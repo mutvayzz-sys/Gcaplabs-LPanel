@@ -10,7 +10,7 @@ function read(relativePath) {
 describe("workspace API-key agent route inventory", () => {
   it("mounts the workspace guard before the gateway and leaves scopes to each router", () => {
     const server = read("server.ts");
-    const workspaceIndex = server.indexOf('app.use("/agents", requireApiKeyAgentPathScope())');
+    const workspaceIndex = server.indexOf('requireApiKeyAgentPathScope({');
     const gatewayIndex = server.indexOf("app.use(createGatewayRouter())");
 
     expect(server).not.toContain(
@@ -43,12 +43,20 @@ describe("workspace API-key agent route inventory", () => {
       expect(ownership).toContain(`"${segment}"`);
     }
     expect(ownership).toContain("sessionOnlyNestedSegments.has(segments[1])");
+    expect(ownership).toContain("sessionOnlyNestedRoutes.has(nestedRouteKey)");
+    expect(read("server.ts")).toContain('"POST integrations/headmaster/adopt"');
   });
 
   it.each(["routes/agents.ts", "routes/nemoclaw.ts"])(
     "keeps an explicit :id guard in %s",
     (relativePath) => {
-      expect(read(relativePath)).toContain('router.param("id", requireApiKeyAgentScope("id"))');
+      const source = read(relativePath);
+      if (relativePath === "routes/agents.ts") {
+        expect(source).toContain('return requireApiKeyAgentScope("id")(req, res, next, id)');
+        expect(source).toContain('segments[3] === "adopt"');
+      } else {
+        expect(source).toContain('router.param("id", requireApiKeyAgentScope("id"))');
+      }
     },
   );
 

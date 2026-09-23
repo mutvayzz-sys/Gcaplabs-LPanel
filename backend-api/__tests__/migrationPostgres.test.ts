@@ -3,6 +3,13 @@
 const fs = require("fs");
 const path = require("path");
 const { Client, Pool } = require("pg");
+const { randomUUID } = require("node:crypto");
+const { createOrReuseExternalAgent } = require("../externalAgentProvisioning");
+const {
+  fingerprintExternalAgentIdentity,
+  normalizeExternalAgentIdentity,
+  stableJson,
+} = require("../externalAgentIdentity");
 
 const TEST_POSTGRES_URL = process.env.TEST_POSTGRES_URL;
 const describeWithPostgres = TEST_POSTGRES_URL ? describe : describe.skip;
@@ -16,6 +23,7 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
   let schemaName;
   let migrateDB;
   let userId;
+  let workspaceId;
 
   beforeAll(async () => {
     schemaName = `nora_migration_${process.pid}_${Date.now()}`;
@@ -69,7 +77,7 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
       `INSERT INTO workspaces(user_id, name) VALUES($1, 'Legacy workspace') RETURNING id`,
       [userId],
     );
-    const workspaceId = workspaceResult.rows[0].id;
+    workspaceId = workspaceResult.rows[0].id;
 
     await migrationPool.query(
       `INSERT INTO workspace_agents(workspace_id, agent_id, role)
@@ -190,6 +198,35 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
     expect(constraintNames.has("agents_create_request_pair_check")).toBe(true);
     expect(constraintNames.has("agents_create_request_key_nonempty_check")).toBe(true);
     expect(constraintNames.has("agents_create_request_fingerprint_sha256_check")).toBe(true);
+
+    const outboxColumns = await migrationPool.query(
+      `SELECT table_name, column_name, data_type
+         FROM information_schema.columns
+        WHERE table_schema = $1
+          AND ((table_name = 'deployments' AND column_name IN ('queue_job_id', 'job_payload'))
+            OR (table_name = 'external_agent_create_requests'
+                AND column_name IN ('user_id', 'agent_id', 'deployment_id', 'request_key', 'request_fingerprint')))
+        ORDER BY table_name, column_name`,
+      [schemaName],
+    );
+    expect(outboxColumns.rows).toEqual([
+      { table_name: "deployments", column_name: "job_payload", data_type: "jsonb" },
+      { table_name: "deployments", column_name: "queue_job_id", data_type: "text" },
+      { table_name: "external_agent_create_requests", column_name: "agent_id", data_type: "uuid" },
+      { table_name: "external_agent_create_requests", column_name: "deployment_id", data_type: "uuid" },
+      { table_name: "external_agent_create_requests", column_name: "request_fingerprint", data_type: "text" },
+      { table_name: "external_agent_create_requests", column_name: "request_key", data_type: "text" },
+      { table_name: "external_agent_create_requests", column_name: "user_id", data_type: "uuid" },
+    ]);
+
+    const outboxIndexes = await migrationPool.query(
+      `SELECT indexname FROM pg_indexes
+        WHERE schemaname = $1 AND tablename = 'external_agent_create_requests'`,
+      [schemaName],
+    );
+    expect(outboxIndexes.rows.map((row) => row.indexname)).toContain(
+      "external_agent_create_requests_agent_idx",
+    );
 
     const externalOwnerId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const insertExternalAgent = ({
@@ -322,5 +359,97 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
         DB_MIGRATION_STATEMENT_TIMEOUT_MS: "60000",
       }),
     ).resolves.toEqual({ total: firstRun.total, applied: 0 });
+  });
+
+  it("serializes concurrent external creates and maps new keys to the same durable operation", async () => {
+    const ownerUuid = randomUUID();
+    const externalId = randomUUID();
+    const identity = normalizeExternalAgentIdentity(
+      {
+        namespace: "headmaster",
+        external_id: externalId,
+        owner_uuid: ownerUuid,
+        runtime_family: "hermes",
+        runtime_target: stableJson({
+          backend_type: "docker",
+          deploy_target: "docker",
+          execution_target_id: "docker",
+          sandbox_profile: "standard",
+        }),
+      },
+      { managementUserId: userId, ownerUuid },
+    );
+    const fingerprint = fingerprintExternalAgentIdentity(identity);
+    const requestKey = `postgres-create-${randomUUID()}`;
+    const makeInput = (key, agentId, requestFingerprint = fingerprint) => ({
+      pool: migrationPool,
+      identity,
+      requestKey: key,
+      fingerprint: requestFingerprint,
+      createIfMissing: true,
+      createFields: {
+        agentId,
+        name: "integration@example.test",
+        node: "docker",
+        backendType: "docker",
+        sandboxType: "standard",
+        vcpu: 1,
+        ramMb: 1024,
+        diskGb: 10,
+        containerName: `nora-hermes-${agentId}`,
+        image: null,
+        templatePayload: {},
+        clawhubSkills: [],
+        hermesSkills: [],
+        runtimeFamily: "hermes",
+        deployTarget: "docker",
+        executionTargetId: "docker",
+        sandboxProfile: "standard",
+      },
+      jobPayloadForAgent: (agent) => ({
+        id: agent.id,
+        name: agent.name,
+        container_name: agent.container_name,
+      }),
+    });
+
+    const concurrent = await Promise.all([
+      createOrReuseExternalAgent(makeInput(requestKey, randomUUID())),
+      createOrReuseExternalAgent(makeInput(requestKey, randomUUID())),
+    ]);
+    expect(concurrent[0].created).not.toBe(concurrent[1].created);
+    expect(concurrent[0].agent.id).toBe(concurrent[1].agent.id);
+    expect(concurrent[0].operation.id).toBe(concurrent[1].operation.id);
+    expect(concurrent[0].operation.queue_job_id).toBe(concurrent[1].operation.queue_job_id);
+
+    const aliasKey = `postgres-alias-${randomUUID()}`;
+    const alias = await createOrReuseExternalAgent(
+      makeInput(aliasKey, randomUUID(), "b".repeat(64)),
+    );
+    expect(alias.created).toBe(false);
+    expect(alias.agent.id).toBe(concurrent[0].agent.id);
+    expect(alias.operation.id).toBe(concurrent[0].operation.id);
+
+    await expect(
+      createOrReuseExternalAgent(makeInput(aliasKey, randomUUID(), "c".repeat(64))),
+    ).rejects.toMatchObject({ statusCode: 409, code: "external_agent_idempotency_conflict" });
+
+    const counts = await migrationPool.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM agents
+           WHERE user_id = $1 AND external_id_namespace = 'headmaster' AND external_id = $2) AS agents,
+         (SELECT COUNT(*)::int FROM deployments
+           WHERE agent_id = $3 AND queue_job_id = $4) AS operations,
+         (SELECT COUNT(*)::int FROM external_agent_create_requests
+           WHERE user_id = $1 AND request_key = ANY($5::text[])) AS request_keys`,
+      [
+        userId,
+        externalId,
+        concurrent[0].agent.id,
+        concurrent[0].operation.queue_job_id,
+        [requestKey, aliasKey],
+      ],
+    );
+    expect(counts.rows[0]).toEqual({ agents: 1, operations: 1, request_keys: 2 });
   });
 });

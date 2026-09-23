@@ -367,6 +367,13 @@ const userToken = jwt.sign({ id: "user-1", email: "user@nora.test", role: "user"
   expiresIn: "1h",
 });
 const auth = (req) => req.set("Authorization", `Bearer ${userToken}`);
+const externalAdminId = "11111111-1111-4111-8111-111111111111";
+const externalAdminToken = jwt.sign(
+  { id: externalAdminId, email: "admin@nora.test", role: "admin" },
+  JWT_SECRET,
+  { expiresIn: "1h" },
+);
+const externalAdminAuth = (req) => req.set("Authorization", `Bearer ${externalAdminToken}`);
 const editorToken = jwt.sign(
   { id: "workspace-editor-1", email: "editor@nora.test", role: "user" },
   JWT_SECRET,
@@ -3897,6 +3904,195 @@ describe("POST /agents/activate-demo", () => {
   });
 });
 
+function externalCreateBody(overrides = {}) {
+  return {
+    name: "owner@example.test",
+    runtime_family: "openclaw",
+    deploy_target: "docker",
+    execution_target_id: "docker",
+    sandbox_profile: "standard",
+    idempotency_key: "headmaster-create-workspace-a",
+    external_identity: {
+      namespace: "headmaster",
+      external_id: "22222222-2222-4222-8222-222222222222",
+      owner_uuid: "33333333-3333-4333-8333-333333333333",
+    },
+    ...overrides,
+  };
+}
+
+function externalCreateFingerprint(body) {
+  const { fingerprintExternalAgentIdentity, normalizeExternalAgentIdentity, stableJson } =
+    require("../externalAgentIdentity");
+  const { resolveRequestedRuntimeFields } = require("../agentRuntimeFields");
+  const runtimeFields = resolveRequestedRuntimeFields({ request: body });
+  const externalIdentity = body.external_identity;
+  const identity = normalizeExternalAgentIdentity(
+    {
+      namespace: externalIdentity.namespace,
+      external_id: externalIdentity.external_id,
+      owner_uuid: externalIdentity.owner_uuid,
+      runtime_family: runtimeFields.runtime_family,
+      runtime_target: stableJson({
+        backend_type: runtimeFields.backend_type,
+        deploy_target: runtimeFields.deploy_target,
+        execution_target_id: runtimeFields.execution_target_id,
+        sandbox_profile: runtimeFields.sandbox_profile,
+      }),
+    },
+    { managementUserId: externalAdminId, ownerUuid: externalIdentity.owner_uuid },
+  );
+  return fingerprintExternalAgentIdentity(identity);
+}
+
+function installExternalCreateDbMock({ existingAgent = null, requestFingerprint = null, operation = null } = {}) {
+  mockDbClient.query.mockImplementation(async (statement, values = []) => {
+    const sql = String(statement).trim();
+    if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [] };
+    if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
+    if (sql.includes("SELECT requests.request_fingerprint")) {
+      return requestFingerprint
+        ? {
+            rows: [
+              {
+                ...existingAgent,
+                mapped_request_fingerprint: requestFingerprint,
+                mapped_deployment_id: operation?.id || null,
+              },
+            ],
+          }
+        : { rows: [] };
+    }
+    if (sql.includes("SELECT * FROM agents WHERE user_id = $1 AND create_request_key")) {
+      return { rows: [] };
+    }
+    if (sql.includes("external_id_namespace = $2 AND external_id = $3")) {
+      return { rows: existingAgent ? [existingAgent] : [] };
+    }
+    if (sql.startsWith("SELECT id, status, queue_job_id, job_payload")) {
+      return { rows: operation ? [operation] : [] };
+    }
+    if (sql.startsWith("INSERT INTO agents(")) {
+      const created = {
+        id: values[0],
+        user_id: values[1],
+        name: values[2],
+        status: "queued",
+        node: values[3],
+        backend_type: values[4],
+        sandbox_type: values[5],
+        vcpu: values[6],
+        ram_mb: values[7],
+        disk_gb: values[8],
+        container_name: values[9],
+        image: values[10],
+        runtime_family: values[14],
+        deploy_target: values[15],
+        execution_target_id: values[16],
+        sandbox_profile: values[17],
+        external_id_namespace: values[18],
+        external_id: values[19],
+        external_owner_id: values[20],
+        create_request_key: values[21],
+        create_request_fingerprint: values[22],
+      };
+      return { rows: [created] };
+    }
+    if (sql.startsWith("INSERT INTO deployments(")) {
+      return {
+        rows: [
+          {
+            id: "55555555-5555-4555-8555-555555555555",
+            status: "queued",
+            queue_job_id: values[1],
+            job_payload: JSON.parse(values[2]),
+          },
+        ],
+      };
+    }
+    if (sql.startsWith("INSERT INTO external_agent_create_requests(")) return { rows: [] };
+    throw new Error(`Unexpected external create SQL: ${sql}`);
+  });
+}
+
+describe("POST /agents/:id/integrations/headmaster/adopt", () => {
+  const agentId = "44444444-4444-4444-8444-444444444444";
+  const workspaceId = "22222222-2222-4222-8222-222222222222";
+  const ownerId = "33333333-3333-4333-8333-333333333333";
+
+  it("rejects user sessions and workspace API keys", async () => {
+    const body = { external_identity: { namespace: "headmaster", external_id: workspaceId, owner_uuid: ownerId } };
+    const userResponse = await auth(
+      request(app).post(`/agents/${agentId}/integrations/headmaster/adopt`).send(body),
+    );
+    expect(userResponse.status).toBe(403);
+    expect(userResponse.body.code).toBe("session_required");
+    expect(mockDb.query).not.toHaveBeenCalled();
+
+    authorizeWorkspaceApiKey();
+    const apiKeyResponse = await workspaceApiKeyAuth(
+      request(app).post(`/agents/${agentId}/integrations/headmaster/adopt`).send(body),
+    );
+    expect(apiKeyResponse.status).toBe(403);
+    expect(mockDb.connect).not.toHaveBeenCalled();
+  });
+
+  it("adopts only the exact legacy agent ID supplied by Headmaster", async () => {
+    const legacyAgent = {
+      id: agentId,
+      user_id: externalAdminId,
+      name: "Legacy label",
+      backend_type: "docker",
+      runtime_family: "hermes",
+      deploy_target: "docker",
+      execution_target_id: "docker",
+      sandbox_profile: "standard",
+      external_id_namespace: null,
+      external_id: null,
+      external_owner_id: null,
+    };
+    const adoptedAgent = {
+      ...legacyAgent,
+      external_id_namespace: "headmaster",
+      external_id: workspaceId,
+      external_owner_id: ownerId,
+    };
+    mockDb.query.mockResolvedValueOnce({ rows: [legacyAgent] });
+    mockDbClient.query.mockImplementation(async (statement) => {
+      const sql = String(statement).trim();
+      if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [] };
+      if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
+      if (sql.startsWith("SELECT * FROM agents WHERE user_id = $1 AND id = $2")) {
+        return { rows: [legacyAgent] };
+      }
+      if (sql.includes("external_id_namespace = $2 AND external_id = $3")) return { rows: [] };
+      if (sql.startsWith("UPDATE agents")) return { rows: [adoptedAgent] };
+      throw new Error(`Unexpected adoption SQL: ${sql}`);
+    });
+
+    const response = await externalAdminAuth(
+      request(app).post(`/agents/${agentId}/integrations/headmaster/adopt`).send({
+        external_identity: { namespace: "headmaster", external_id: workspaceId, owner_uuid: ownerId },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: agentId,
+      external_identity: { namespace: "headmaster", external_id: workspaceId, owner_uuid: ownerId },
+      adopted: true,
+    });
+    expect(mockDb.query).toHaveBeenCalledWith(
+      "SELECT * FROM agents WHERE id = $1 AND user_id = $2",
+      [agentId, externalAdminId],
+    );
+    const queries = mockDbClient.query.mock.calls.map(([statement]) => String(statement).trim());
+    expect(queries.some((sql) => sql.startsWith("UPDATE agents"))).toBe(true);
+    expect(queries.indexOf("COMMIT")).toBeGreaterThan(queries.findIndex((sql) => sql.startsWith("UPDATE agents")));
+    expect(mockDbClient.release).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("POST /agents/deploy", () => {
   it("rejects unauthenticated request", async () => {
     const res = await request(app).post("/agents/deploy").send({});
@@ -4033,6 +4229,147 @@ describe("POST /agents/deploy", () => {
         execution_target_id: "remote:session-host",
       }),
     );
+  });
+
+  it("requires an administrator session for external identity creation", async () => {
+    const res = await auth(
+      request(app).post("/agents/deploy").send(externalCreateBody()),
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("session_required");
+    expect(mockDb.connect).not.toHaveBeenCalled();
+    expect(require("../billing").enforceLimits).not.toHaveBeenCalled();
+    expect(mockAddDeploymentJob).not.toHaveBeenCalled();
+  });
+
+  it("creates external agent and durable job in one transaction with an ID-derived container name", async () => {
+    installExternalCreateDbMock();
+    const events = [];
+    const queryImplementation = mockDbClient.query.getMockImplementation();
+    mockDbClient.query.mockImplementation(async (statement, values) => {
+      if (String(statement).trim() === "COMMIT") events.push("commit");
+      return queryImplementation(statement, values);
+    });
+    mockAddDeploymentJob.mockImplementation(async (...args) => {
+      events.push("enqueue");
+      return { id: args[1].jobId };
+    });
+
+    const res = await externalAdminAuth(
+      request(app).post("/agents/deploy").send(externalCreateBody()),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: expect.any(String),
+      status: "queued",
+      container_name: `nora-oclaw-${res.body.id}`,
+      job_id: `headmaster-create-${res.body.id}`,
+      created: true,
+    });
+    expect(mockDb.connect).toHaveBeenCalledTimes(2);
+    expect(mockAddDeploymentJob).toHaveBeenCalledWith(
+      expect.objectContaining({ id: res.body.id, name: "owner@example.test" }),
+      { jobId: `headmaster-create-${res.body.id}` },
+    );
+    expect(events).toEqual(["commit", "commit", "enqueue"]);
+
+    const calls = mockDbClient.query.mock.calls.map(([statement]) => String(statement).trim());
+    const finalBegin = calls.lastIndexOf("BEGIN");
+    const agentInsert = calls.findIndex((statement, index) => index > finalBegin && statement.startsWith("INSERT INTO agents("));
+    const deploymentInsert = calls.findIndex((statement, index) => index > finalBegin && statement.startsWith("INSERT INTO deployments("));
+    const requestInsert = calls.findIndex((statement, index) => index > finalBegin && statement.startsWith("INSERT INTO external_agent_create_requests("));
+    const finalCommit = calls.lastIndexOf("COMMIT");
+    expect(agentInsert).toBeGreaterThan(finalBegin);
+    expect(deploymentInsert).toBeGreaterThan(agentInsert);
+    expect(requestInsert).toBeGreaterThan(deploymentInsert);
+    expect(finalCommit).toBeGreaterThan(requestInsert);
+  });
+
+  it("returns the same agent and job for an identical idempotent retry", async () => {
+    const body = externalCreateBody();
+    const fingerprint = externalCreateFingerprint(body);
+    const existingAgent = {
+      id: "44444444-4444-4444-8444-444444444444",
+      user_id: externalAdminId,
+      name: body.name,
+      status: "queued",
+      container_name: "nora-oclaw-existing-agent-id",
+      external_id_namespace: "headmaster",
+      external_id: body.external_identity.external_id,
+      external_owner_id: body.external_identity.owner_uuid,
+    };
+    const operation = {
+      id: "55555555-5555-4555-8555-555555555555",
+      status: "queued",
+      queue_job_id: `headmaster-create-${existingAgent.id}`,
+      job_payload: { id: existingAgent.id, name: body.name },
+    };
+    installExternalCreateDbMock({ existingAgent, requestFingerprint: fingerprint, operation });
+
+    const res = await externalAdminAuth(request(app).post("/agents/deploy").send(body));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: existingAgent.id, job_id: operation.queue_job_id, created: false });
+    expect(mockDb.connect).toHaveBeenCalledTimes(1);
+    expect(require("../billing").enforceLimits).not.toHaveBeenCalled();
+    expect(mockAddDeploymentJob).toHaveBeenCalledWith(operation.job_payload, { jobId: operation.queue_job_id });
+  });
+
+  it("returns 409 when an idempotency key is retried with changed immutable inputs", async () => {
+    const originalBody = externalCreateBody();
+    const changedBody = externalCreateBody({
+      external_identity: {
+        ...originalBody.external_identity,
+        external_id: "66666666-6666-4666-8666-666666666666",
+      },
+    });
+    const existingAgent = {
+      id: "44444444-4444-4444-8444-444444444444",
+      user_id: externalAdminId,
+      status: "queued",
+      external_id_namespace: "headmaster",
+      external_id: originalBody.external_identity.external_id,
+      external_owner_id: originalBody.external_identity.owner_uuid,
+    };
+    installExternalCreateDbMock({
+      existingAgent,
+      requestFingerprint: externalCreateFingerprint(originalBody),
+    });
+
+    const res = await externalAdminAuth(request(app).post("/agents/deploy").send(changedBody));
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("external_agent_idempotency_conflict");
+    expect(mockAddDeploymentJob).not.toHaveBeenCalled();
+  });
+
+  it("maps a new request key to an existing external identity without creating another agent", async () => {
+    const body = externalCreateBody({ idempotency_key: "headmaster-create-workspace-a-retry" });
+    const existingAgent = {
+      id: "44444444-4444-4444-8444-444444444444",
+      user_id: externalAdminId,
+      name: body.name,
+      status: "queued",
+      external_id_namespace: "headmaster",
+      external_id: body.external_identity.external_id,
+      external_owner_id: body.external_identity.owner_uuid,
+    };
+    const operation = {
+      id: "55555555-5555-4555-8555-555555555555",
+      status: "queued",
+      queue_job_id: `headmaster-create-${existingAgent.id}`,
+      job_payload: { id: existingAgent.id, name: body.name },
+    };
+    installExternalCreateDbMock({ existingAgent, operation });
+
+    const res = await externalAdminAuth(request(app).post("/agents/deploy").send(body));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: existingAgent.id, job_id: operation.queue_job_id, created: false });
+    expect(mockDbClient.query.mock.calls.some(([statement]) => String(statement).includes("INSERT INTO agents("))).toBe(false);
+    expect(mockDbClient.query.mock.calls.some(([statement]) => String(statement).includes("INSERT INTO external_agent_create_requests"))).toBe(true);
   });
 
   it("rejects agent name over 100 chars", async () => {

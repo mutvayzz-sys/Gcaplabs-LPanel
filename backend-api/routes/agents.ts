@@ -1,5 +1,6 @@
 // @ts-nocheck
 const express = require("express");
+const { randomUUID } = require("node:crypto");
 const { Client } = require("pg");
 const db = require("../db");
 const { encrypt, decrypt } = require("../crypto");
@@ -95,6 +96,16 @@ const {
 } = require("../middleware/ownership");
 const { requireSession, scopeByMethod } = require("../middleware/auth");
 const agentVersions = require("../agentVersions");
+const {
+  fingerprintExternalAgentIdentity,
+  normalizeExternalAgentIdentity,
+  stableJson,
+} = require("../externalAgentIdentity");
+const {
+  adoptExternalAgent,
+  createOrReuseExternalAgent,
+  normalizeExternalAgentCreateRequestKey,
+} = require("../externalAgentProvisioning");
 const { assertKubernetesExecutionTargetAvailable } = require("../kubernetesClusters");
 const {
   assertRemoteHostAgentUse,
@@ -145,7 +156,22 @@ router.use((req, res, next) => {
   }
   return coreAgentScope(req, res, next);
 });
-router.param("id", requireApiKeyAgentScope("id"));
+router.param("id", (req, res, next, id) => {
+  // Let the adoption handler reject API keys without an unrelated workspace
+  // lookup; all other agent-id routes keep their exact workspace check.
+  const segments = String(req.path || "")
+    .split("/")
+    .filter(Boolean);
+  const isHeadmasterAdoption =
+    req.apiKey &&
+    req.method === "POST" &&
+    segments.length === 4 &&
+    segments[1] === "integrations" &&
+    segments[2] === "headmaster" &&
+    segments[3] === "adopt";
+  if (isHeadmasterAdoption) return next();
+  return requireApiKeyAgentScope("id")(req, res, next, id);
+});
 
 const DEMO_ACTIVATION_MARKER = "local-docker-demo-v1";
 
@@ -2170,6 +2196,90 @@ router.post("/deploy", async (req, res) => {
     // before the family is known) so non-Hermes agents always store [].
     const hermesSkills = runtimeFields.runtime_family === "hermes" ? requestedHermesSkills : [];
     if (!requireSessionForRemoteDockerPlacement(req, res, runtimeFields)) return;
+
+    const hasExternalCreateFields =
+      requestBody.external_identity !== undefined || requestBody.idempotency_key !== undefined;
+    let externalCreate = null;
+    if (hasExternalCreateFields) {
+      if (req.apiKey || req.user?.role !== "admin") {
+        return res.status(403).json({
+          error: "External identity provisioning requires an authenticated Nora administrator session",
+          code: "session_required",
+        });
+      }
+      if (migrationDraft) {
+        return res.status(400).json({
+          error: "External identity provisioning cannot be combined with a migration draft",
+        });
+      }
+      if (
+        !requestBody.external_identity ||
+        typeof requestBody.external_identity !== "object" ||
+        Array.isArray(requestBody.external_identity)
+      ) {
+        return res.status(400).json({ error: "external_identity must be an object" });
+      }
+
+      let requestKey;
+      let identity;
+      try {
+        requestKey = normalizeExternalAgentCreateRequestKey(requestBody.idempotency_key);
+        const externalIdentity = requestBody.external_identity;
+        identity = normalizeExternalAgentIdentity(
+          {
+            namespace: externalIdentity.namespace,
+            external_id: externalIdentity.external_id,
+            owner_uuid: externalIdentity.owner_uuid,
+            runtime_family: runtimeFields.runtime_family,
+            runtime_target: stableJson({
+              backend_type: runtimeFields.backend_type,
+              deploy_target: runtimeFields.deploy_target,
+              execution_target_id: runtimeFields.execution_target_id,
+              sandbox_profile: runtimeFields.sandbox_profile,
+            }),
+          },
+          {
+            managementUserId: req.user.id,
+            // This owner value is accepted only through the privileged Nora
+            // administrator session used by the Headmaster server integration.
+            ownerUuid: externalIdentity.owner_uuid,
+          },
+        );
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      externalCreate = {
+        requestKey,
+        identity,
+        fingerprint: fingerprintExternalAgentIdentity(identity),
+      };
+
+      const existing = await createOrReuseExternalAgent({
+        pool: db,
+        ...externalCreate,
+        createIfMissing: false,
+        createFields: {},
+        jobPayloadForAgent: () => ({}),
+      });
+      if (existing.agent) {
+        if (
+          ["queued", "deploying"].includes(existing.agent.status) &&
+          existing.operation?.queue_job_id &&
+          existing.operation?.job_payload
+        ) {
+          await addDeploymentJob(existing.operation.job_payload, {
+            jobId: existing.operation.queue_job_id,
+          });
+        }
+        return res.json({
+          ...serializeAgent(existing.agent),
+          job_id: existing.operation?.queue_job_id || null,
+          created: false,
+        });
+      }
+    }
+
     // Enforce billing only after authorization has rejected session-only
     // Remote Docker placement for workspace API keys.
     const limits = await billing.enforceLimits(req.user.id);
@@ -2242,6 +2352,101 @@ router.post("/deploy", async (req, res) => {
               source: "blank-deploy",
             }),
     );
+
+    if (externalCreate) {
+      const externalAgentId = randomUUID();
+      const externalContainerName = `nora-${runtimeFields.runtime_family === "hermes" ? "hermes" : "oclaw"}-${externalAgentId}`;
+      const externalResult = await createOrReuseExternalAgent({
+        pool: db,
+        ...externalCreate,
+        createIfMissing: true,
+        createFields: {
+          agentId: externalAgentId,
+          name,
+          node: nodeName,
+          backendType: runtimeFields.backend_type,
+          sandboxType: runtimeFields.sandbox_type,
+          vcpu: specs.vcpu,
+          ramMb: specs.ram_mb,
+          diskGb: specs.disk_gb,
+          containerName: externalContainerName,
+          image,
+          templatePayload,
+          clawhubSkills,
+          hermesSkills,
+          runtimeFamily: runtimeFields.runtime_family,
+          deployTarget: runtimeFields.deploy_target,
+          executionTargetId: runtimeFields.execution_target_id,
+          sandboxProfile: runtimeFields.sandbox_profile,
+        },
+        jobPayloadForAgent: (externalAgent) => ({
+          id: externalAgent.id,
+          name: externalAgent.name,
+          userId: req.user.id,
+          plan: sub.plan,
+          backend: externalAgent.backend_type,
+          execution_target_id: externalAgent.execution_target_id,
+          sandbox: externalAgent.sandbox_profile,
+          specs: {
+            vcpu: externalAgent.vcpu,
+            ram_mb: externalAgent.ram_mb,
+            disk_gb: externalAgent.disk_gb,
+          },
+          container_name: externalAgent.container_name,
+          image: externalAgent.image,
+          model: runtimeFields.sandbox_profile === "nemoclaw" ? requestBody.model || null : null,
+          migration_draft_id: null,
+          clawhub_skills: clawhubSkills,
+          hermes_skills: hermesSkills,
+        }),
+      });
+      const agent = externalResult.agent;
+      if (!agent) throw new Error("External agent creation returned no agent");
+
+      if (externalResult.created) {
+        agentVersions.recordVersionBestEffort(agent.id, templatePayload, {
+          createdBy: req.user.id,
+          message: `Initial deploy: ${name}`,
+          source: "deploy",
+        });
+      }
+      if (
+        ["queued", "deploying"].includes(agent.status) &&
+        externalResult.operation?.queue_job_id &&
+        externalResult.operation?.job_payload
+      ) {
+        await addDeploymentJob(externalResult.operation.job_payload, {
+          jobId: externalResult.operation.queue_job_id,
+        });
+      }
+
+      const deployType = `${runtimeSelectionStatus.runtimeFamily}/${runtimeSelectionStatus.deployTarget}/${runtimeSelectionStatus.sandboxProfile}`;
+      if (externalResult.created) {
+        await monitoring.logEvent(
+          "agent_deployed",
+          `Agent "${name}" (${deployType}) queued for deployment`,
+          agentAuditMetadata(req, agent, {
+            deploy: {
+              runtimeFamily: runtimeFields.runtime_family,
+              deployTarget: runtimeFields.deploy_target,
+              executionTargetId: runtimeFields.execution_target_id,
+              sandboxProfile: runtimeFields.sandbox_profile,
+              backend: runtimeFields.backend_type,
+              type: deployType,
+              specs,
+              image,
+              containerName: externalContainerName,
+            },
+          }),
+        );
+      }
+
+      return res.json({
+        ...serializeAgent(agent),
+        job_id: externalResult.operation?.queue_job_id || null,
+        created: externalResult.created,
+      });
+    }
 
     const result = await insertAgentForRequest(
       req,
@@ -2339,7 +2544,10 @@ router.post("/deploy", async (req, res) => {
 
     res.json(serializeAgent(agent));
   } catch (e) {
-    res.status(e.statusCode || 500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({
+      error: e.message,
+      ...(e.code ? { code: e.code } : {}),
+    });
   }
 });
 
@@ -2449,6 +2657,71 @@ router.post("/adopt", async (req, res) => {
     res.status(e.statusCode || 500).json({ error: e.message });
   }
 });
+
+router.post(
+  "/:id/integrations/headmaster/adopt",
+  asyncHandler(async (req, res) => {
+    if (req.apiKey || req.user?.role !== "admin") {
+      return res.status(403).json({
+        error: "Headmaster external identity adoption requires an authenticated Nora administrator session",
+        code: "session_required",
+      });
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+      return res.status(400).json({ error: "Agent ID must be a canonical UUID" });
+    }
+    const externalIdentity = req.body?.external_identity;
+    if (!externalIdentity || typeof externalIdentity !== "object" || Array.isArray(externalIdentity)) {
+      return res.status(400).json({ error: "external_identity must be an object" });
+    }
+
+    const selected = await db.query(
+      "SELECT * FROM agents WHERE id = $1 AND user_id = $2",
+      [req.params.id, req.user.id],
+    );
+    const agent = selected.rows[0];
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+    try {
+      const runtimeFields = buildAgentRuntimeFields(agent);
+      const identity = normalizeExternalAgentIdentity(
+        {
+          namespace: externalIdentity.namespace,
+          external_id: externalIdentity.external_id,
+          owner_uuid: externalIdentity.owner_uuid,
+          runtime_family: runtimeFields.runtime_family,
+          runtime_target: stableJson({
+            backend_type: runtimeFields.backend_type,
+            deploy_target: runtimeFields.deploy_target,
+            execution_target_id: runtimeFields.execution_target_id,
+            sandbox_profile: runtimeFields.sandbox_profile,
+          }),
+        },
+        {
+          managementUserId: req.user.id,
+          ownerUuid: externalIdentity.owner_uuid,
+        },
+      );
+      const result = await adoptExternalAgent({ pool: db, agentId: agent.id, identity });
+      if (!result.agent) return res.status(404).json({ error: "Agent not found" });
+      return res.json({
+        id: result.agent.id,
+        external_identity: {
+          namespace: result.agent.external_id_namespace,
+          external_id: result.agent.external_id,
+          owner_uuid: result.agent.external_owner_id,
+        },
+        adopted: result.adopted,
+      });
+    } catch (error) {
+      if (error.statusCode === 409) {
+        return res.status(409).json({ error: error.message, code: error.code });
+      }
+      if (error instanceof TypeError) return res.status(400).json({ error: error.message });
+      throw error;
+    }
+  }),
+);
 
 router.patch(
   "/:id",

@@ -153,16 +153,19 @@ function requireApiKeyAgentPathScope(options = {}) {
   const sessionOnlyNestedSegments = new Set(
     options.sessionOnlyNestedSegments || ["backups", "export", "files"],
   );
+  const sessionOnlyNestedRoutes = new Set(options.sessionOnlyNestedRoutes || []);
   return async (req, res, next) => {
     if (!req.apiKey) return next();
     const segments = String(req.path || "")
       .split("/")
       .filter(Boolean);
     const firstSegment = segments[0];
+    const nestedRouteKey = `${req.method} ${segments.slice(1).join("/")}`;
     if (
       !firstSegment ||
       collectionSegments.has(firstSegment) ||
-      (segments.length > 1 && sessionOnlyNestedSegments.has(segments[1]))
+      (segments.length > 1 && sessionOnlyNestedSegments.has(segments[1])) ||
+      sessionOnlyNestedRoutes.has(nestedRouteKey)
     ) {
       return next();
     }

@@ -1290,7 +1290,12 @@ app.use(authenticateToken);
 // Agent-id paths enforce the API key's exact workspace assignment before any
 // router can touch runtime state. Each router then applies its own public scope
 // contract (agents, integrations, monitoring, or session-only).
-app.use("/agents", requireApiKeyAgentPathScope());
+app.use(
+  "/agents",
+  requireApiKeyAgentPathScope({
+    sessionOnlyNestedRoutes: ["POST integrations/headmaster/adopt"],
+  }),
+);
 
 // ─── Gateway Proxy ────────────────────────────────────────────────
 app.use(createGatewayRouter());
@@ -2475,6 +2480,41 @@ async function migrateDB(database = db, env = process.env) {
     `CREATE UNIQUE INDEX agents_create_request_key_unique_idx
        ON agents(user_id, create_request_key)
        WHERE create_request_key IS NOT NULL`,
+    // Durable N1 outbox: the agent, operation payload and all request-key aliases
+    // commit together before BullMQ is touched.
+    `ALTER TABLE agents ADD CONSTRAINT agents_user_id_id_unique UNIQUE(user_id, id)`,
+    `ALTER TABLE deployments ADD COLUMN queue_job_id TEXT`,
+    `ALTER TABLE deployments ADD COLUMN job_payload JSONB`,
+    `CREATE UNIQUE INDEX deployments_queue_job_id_unique_idx
+       ON deployments(queue_job_id)
+       WHERE queue_job_id IS NOT NULL`,
+    `CREATE TABLE external_agent_create_requests (
+       user_id UUID NOT NULL,
+       agent_id UUID NOT NULL,
+       deployment_id UUID,
+       request_key TEXT NOT NULL CHECK (length(btrim(request_key)) > 0),
+       request_fingerprint TEXT NOT NULL CHECK (request_fingerprint ~ '^[0-9a-f]{64}$'),
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+       CONSTRAINT external_agent_create_requests_user_key_unique UNIQUE(user_id, request_key),
+       CONSTRAINT external_agent_create_requests_agent_owner_fk
+         FOREIGN KEY (user_id, agent_id) REFERENCES agents(user_id, id) ON DELETE CASCADE,
+       CONSTRAINT external_agent_create_requests_deployment_fk
+         FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE SET NULL
+     )`,
+    `CREATE INDEX external_agent_create_requests_agent_idx
+       ON external_agent_create_requests(agent_id, created_at)`,
+    `INSERT INTO external_agent_create_requests(user_id, agent_id, deployment_id, request_key, request_fingerprint)
+       SELECT agents.user_id, agents.id, deployments.id, agents.create_request_key, agents.create_request_fingerprint
+         FROM agents
+         LEFT JOIN LATERAL (
+           SELECT id FROM deployments
+            WHERE deployments.agent_id = agents.id
+            ORDER BY deployments.created_at, deployments.id
+            LIMIT 1
+         ) deployments ON TRUE
+        WHERE agents.create_request_key IS NOT NULL
+          AND agents.create_request_fingerprint IS NOT NULL
+       ON CONFLICT (user_id, request_key) DO NOTHING`,
   ];
 
   return runVersionedMigrations(database, migrations, {
