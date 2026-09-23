@@ -64,6 +64,7 @@ const { repairHermesAgentConfig } = require("./hermesUi");
 const { HERMES_EMBED_AGENT_COLUMNS, GATEWAY_EMBED_AGENT_COLUMNS } = require("./embedAgentColumns");
 const { establishHermesDashboardSession, needsHermesLogin } = require("./hermesDashboardSession");
 const { decrypt: decryptSecret } = require("./crypto");
+const { backfillLegacyRuntimeCredentials } = require("./runtimeIdentity");
 const {
   joinHttpUrl,
   hasGatewayEndpoint,
@@ -1310,6 +1311,8 @@ app.use("/agents", require("./routes/agentFiles"));
 app.use("/agents", require("./routes/channels"));
 app.use("/agents", require("./routes/nemoclaw"));
 app.use("/agent-migrations", require("./routes/agentMigrations"));
+app.use("/integrations/headmaster", require("./routes/headmasterRuntimeIdentity"));
+app.use("/api/integrations/headmaster", require("./routes/headmasterRuntimeIdentity"));
 app.use("/", require("./routes/integrations")); // handles /agents/:id/integrations + /integrations/catalog
 app.use("/", require("./routes/monitoring")); // handles /monitoring/* + /agents/:id/metrics
 app.use("/llm-providers", require("./routes/llmProviders"));
@@ -2527,6 +2530,30 @@ async function migrateDB(database = db, env = process.env) {
        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
      )`,
+    // N3: index the SHA-256 of each applied/desired runtime key by generation.
+    // No plaintext runtime key is stored in this table.
+    `CREATE TABLE IF NOT EXISTS agent_runtime_credentials (
+       agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+       generation BIGINT NOT NULL CHECK (generation > 0),
+       key_digest TEXT NOT NULL CHECK (key_digest ~ '^[0-9a-f]{64}$'),
+       credential_state TEXT NOT NULL CHECK (credential_state IN ('desired', 'active', 'retired')),
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+       activated_at TIMESTAMPTZ,
+       retired_at TIMESTAMPTZ,
+       PRIMARY KEY(agent_id, generation),
+       CONSTRAINT agent_runtime_credentials_digest_unique UNIQUE(key_digest),
+       CONSTRAINT agent_runtime_credentials_state_timestamps_check CHECK (
+         (credential_state = 'desired' AND activated_at IS NULL AND retired_at IS NULL)
+         OR (credential_state = 'active' AND activated_at IS NOT NULL AND retired_at IS NULL)
+         OR (credential_state = 'retired' AND retired_at IS NOT NULL)
+       )
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS agent_runtime_credentials_one_active_idx
+       ON agent_runtime_credentials(agent_id) WHERE credential_state = 'active'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS agent_runtime_credentials_one_desired_idx
+       ON agent_runtime_credentials(agent_id) WHERE credential_state = 'desired'`,
+    `CREATE INDEX IF NOT EXISTS agent_runtime_credentials_agent_state_idx
+       ON agent_runtime_credentials(agent_id, credential_state, generation DESC)`,
   ];
 
   return runVersionedMigrations(database, migrations, {
@@ -2680,6 +2707,12 @@ if (require.main === module) {
     // a transaction, advisory lock, append-only ledger, and checksums; Nora
     // must never serve traffic against a partially migrated database.
     await migrateDB();
+    const runtimeCredentialBackfill = await backfillLegacyRuntimeCredentials(db, decryptSecret);
+    if (runtimeCredentialBackfill.indexed > 0) {
+      console.log(
+        `[runtime-identity] Backfilled ${runtimeCredentialBackfill.indexed} legacy Headmaster runtime credential digests`,
+      );
+    }
     // Bootstrap credentials are an activation and security gate. Validate and
     // seed them before binding the HTTP listener so a copied placeholder or a
     // password rejected by policy cannot silently leave first-run signup open.

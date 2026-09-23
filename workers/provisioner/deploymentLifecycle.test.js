@@ -241,10 +241,24 @@ test("an ordinary redeploy using the demo provider is not first activation", () 
 });
 
 test("runtime metadata persistence keeps the deployment behind the deploying barrier", async () => {
-  let sql = "";
+  const statements = [];
   const queryable = {
     query: async (statement) => {
-      sql = statement;
+      const sql = String(statement).replace(/\s+/g, " ").trim();
+      statements.push(sql);
+      if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [] };
+      if (sql.startsWith("SELECT id, container_id, external_id_namespace, external_owner_id")) {
+        return {
+          rows: [
+            {
+              id: "agent-1",
+              container_id: null,
+              external_id_namespace: null,
+              external_owner_id: null,
+            },
+          ],
+        };
+      }
       return { rows: [{ id: "agent-1", container_id: "runtime-1" }] };
     },
   };
@@ -260,10 +274,151 @@ test("runtime metadata persistence keeps the deployment behind the deploying bar
     sandboxType: "standard",
   });
 
-  assert.deepEqual(result, { persisted: true, containerId: "runtime-1" });
-  assert.match(sql, /AND status = 'deploying'/);
-  assert.match(sql, /container_id IS NULL OR container_id = \$2/);
-  assert.doesNotMatch(sql, /SET status = 'running'/);
+  assert.deepEqual(result, {
+    persisted: true,
+    containerId: "runtime-1",
+    runtimeCredentialGeneration: null,
+  });
+  const metadataUpdate = statements.find((sql) => sql.startsWith("UPDATE agents"));
+  assert.match(metadataUpdate, /AND status = 'deploying'/);
+  assert.match(metadataUpdate, /container_id IS NULL OR container_id = \$2/);
+  assert.doesNotMatch(metadataUpdate, /SET status = 'running'/);
+});
+
+test("Headmaster runtime keys are staged with metadata and activated atomically at finalization", async () => {
+  const credentials = [];
+  const events = [];
+  const agent = {
+    id: "agent-headmaster",
+    container_id: null,
+    status: "deploying",
+    external_id_namespace: "headmaster",
+    external_owner_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  };
+  const digest = "a".repeat(64);
+  const client = {
+    query: async (statement, params = []) => {
+      const sql = String(statement).replace(/\s+/g, " ").trim();
+      events.push(sql);
+      if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [] };
+      if (sql.includes("SELECT id, container_id, external_id_namespace, external_owner_id")) {
+        return { rows: agent.status === "deploying" ? [{ ...agent }] : [] };
+      }
+      if (sql.includes("WHERE key_digest = $1")) {
+        const row = credentials.find((entry) => entry.key_digest === params[0]);
+        return {
+          rows: row
+            ? [
+                {
+                  agent_id: row.agent_id,
+                  generation: String(row.generation),
+                  credential_state: row.credential_state,
+                },
+              ]
+            : [],
+        };
+      }
+      if (sql.includes("COALESCE(MAX(generation), 0)")) {
+        const max = credentials
+          .filter((entry) => entry.agent_id === params[0])
+          .reduce((value, entry) => Math.max(value, entry.generation), 0);
+        return { rows: [{ generation: String(max) }] };
+      }
+      if (sql.includes("SELECT credential_state") && sql.includes("generation = $2")) {
+        const row = credentials.find(
+          (entry) => entry.agent_id === params[0] && entry.generation === Number(params[1]),
+        );
+        return { rows: row ? [{ credential_state: row.credential_state }] : [] };
+      }
+      if (
+        sql.startsWith("UPDATE agent_runtime_credentials") &&
+        sql.includes("credential_state = 'retired'")
+      ) {
+        const [agentId, generation] = params;
+        for (const row of credentials) {
+          if (
+            row.agent_id === agentId &&
+            row.credential_state !== "retired" &&
+            (!sql.includes("generation <> $2") || row.generation !== Number(generation))
+          ) {
+            row.credential_state = "retired";
+          }
+        }
+        return { rows: [] };
+      }
+      if (
+        sql.startsWith("UPDATE agent_runtime_credentials") &&
+        sql.includes("credential_state = 'active'")
+      ) {
+        const [agentId, generation] = params;
+        const row = credentials.find(
+          (entry) => entry.agent_id === agentId && entry.generation === Number(generation),
+        );
+        if (row) row.credential_state = "active";
+        return { rows: [] };
+      }
+      if (sql.startsWith("INSERT INTO agent_runtime_credentials")) {
+        credentials.push({
+          agent_id: params[0],
+          generation: Number(params[1]),
+          key_digest: params[2],
+          credential_state: "desired",
+        });
+        return { rows: [] };
+      }
+      if (sql.startsWith("UPDATE agents") && sql.includes("SET container_id = $2")) {
+        agent.container_id = params[1];
+        return { rows: [{ id: agent.id, container_id: agent.container_id }] };
+      }
+      if (sql.startsWith("UPDATE agents") && sql.includes("SET status = 'running'")) {
+        agent.status = "running";
+        return { rows: [{ id: agent.id, external_id_namespace: agent.external_id_namespace }] };
+      }
+      if (sql.startsWith("UPDATE deployments")) return { rows: [{ agent_id: agent.id }] };
+      if (sql.startsWith("INSERT INTO events")) return { rows: [] };
+      throw new Error(`Unexpected lifecycle SQL: ${sql}`);
+    },
+    release: () => events.push("RELEASE"),
+  };
+  const pool = { connect: async () => client };
+
+  const metadata = await persistProvisionedRuntimeMetadata(pool, {
+    agentId: agent.id,
+    containerId: "runtime-new",
+    gatewayToken: "encrypted-token",
+    gatewayTokenDigest: digest,
+    runtimeFamily: "hermes",
+    backendType: "hermes",
+    deployTarget: "docker",
+    executionTargetId: "docker",
+    sandboxProfile: "standard",
+  });
+
+  assert.equal(metadata.runtimeCredentialGeneration, "1");
+  assert.deepEqual(
+    credentials.map((row) => row.credential_state),
+    ["desired"],
+  );
+  await finalizeProvisionedDeployment(pool, {
+    agentId: agent.id,
+    containerId: "runtime-new",
+    name: "Headmaster runtime",
+    backend: "docker",
+    runtimeCredentialGeneration: metadata.runtimeCredentialGeneration,
+  });
+
+  assert.equal(agent.status, "running");
+  assert.deepEqual(
+    credentials.map((row) => row.credential_state),
+    ["active"],
+  );
+  const activationIndex = events.findIndex(
+    (sql) =>
+      sql.startsWith("UPDATE agent_runtime_credentials") &&
+      sql.includes("credential_state = 'active'"),
+  );
+  const commitIndex = events.lastIndexOf("COMMIT");
+  assert.ok(activationIndex > -1 && commitIndex > activationIndex);
 });
 
 test("readiness finalization waits for auth reconciliation to settle", async () => {
@@ -601,16 +756,18 @@ test("managed revision is marked applied in the same transaction that activates 
     release: () => calls.push({ sql: "RELEASE" }),
   };
 
-  await assert.doesNotReject(finalizeProvisionedDeployment(
-    { connect: async () => client },
-    {
-      agentId: "agent-1",
-      containerId: "runtime-1",
-      name: "Demo Agent",
-      backend: "docker",
-      managedConfigRevision: 5,
-    },
-  ));
+  await assert.doesNotReject(
+    finalizeProvisionedDeployment(
+      { connect: async () => client },
+      {
+        agentId: "agent-1",
+        containerId: "runtime-1",
+        name: "Demo Agent",
+        backend: "docker",
+        managedConfigRevision: 5,
+      },
+    ),
+  );
 
   const appliedIndex = calls.findIndex(({ sql }) => sql.startsWith("UPDATE agent_managed_config"));
   const eventIndex = calls.findIndex(({ sql }) => sql.startsWith("INSERT INTO events"));
@@ -637,20 +794,32 @@ test("managed revision mismatch rolls back runtime activation instead of marking
     release: () => calls.push({ sql: "RELEASE" }),
   };
 
-  await assert.rejects(finalizeProvisionedDeployment(
-    { connect: async () => client },
-    {
-      agentId: "agent-1",
-      containerId: "runtime-1",
-      name: "Demo Agent",
-      backend: "docker",
-      managedConfigRevision: 4,
-    },
-  ), /managed configuration revision changed/i);
+  await assert.rejects(
+    finalizeProvisionedDeployment(
+      { connect: async () => client },
+      {
+        agentId: "agent-1",
+        containerId: "runtime-1",
+        name: "Demo Agent",
+        backend: "docker",
+        managedConfigRevision: 4,
+      },
+    ),
+    /managed configuration revision changed/i,
+  );
 
-  assert.equal(calls.some(({ sql }) => sql === "ROLLBACK"), true);
-  assert.equal(calls.some(({ sql }) => sql === "COMMIT"), false);
-  assert.equal(calls.some(({ sql }) => sql.startsWith("INSERT INTO events")), false);
+  assert.equal(
+    calls.some(({ sql }) => sql === "ROLLBACK"),
+    true,
+  );
+  assert.equal(
+    calls.some(({ sql }) => sql === "COMMIT"),
+    false,
+  );
+  assert.equal(
+    calls.some(({ sql }) => sql.startsWith("INSERT INTO events")),
+    false,
+  );
   assert.equal(calls.at(-1).sql, "RELEASE");
 });
 

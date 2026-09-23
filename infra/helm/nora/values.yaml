@@ -57,6 +57,8 @@ secrets:
   # Name of an existing Secret carrying JWT_SECRET, ENCRYPTION_KEY,
   # NORA_BACKUP_ENCRYPTION_KEY, NORA_API_KEY_HASH_SECRET,
   # NORA_AGENT_HUB_API_KEY_HASH_SECRET, and DB_PASSWORD.
+  # Include NORA_HEADMASTER_RUNTIME_IDENTITY_TOKEN when enabling the private
+  # Headmaster runtime-identity endpoint through an existing Secret.
   # The Secret is mounted at /run/secrets for control-plane pods rather than
   # injected wholesale with envFrom. Leave empty to create it from values below.
   existingSecret: ""
@@ -69,6 +71,8 @@ secrets:
   # Required and distinct from apiKeyHashSecret for new installs. Upgrades from
   # older chart values may leave it empty to retain the legacy shared-key fallback.
   agentHubApiKeyHashSecret: ""
+  # Service credential for private Headmaster runtime-identity lookups; 32+ random characters.
+  runtimeIdentityToken: ""
   dbPassword: ""
 
 # Extra non-secret environment variables applied to backend-api and both

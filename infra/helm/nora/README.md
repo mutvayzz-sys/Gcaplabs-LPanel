@@ -24,7 +24,9 @@ No insecure defaults ship in the chart: installs fail fast until the six
 secret values are provided (or `secrets.existingSecret` points at a Secret
 carrying `JWT_SECRET`, `ENCRYPTION_KEY`, `NORA_BACKUP_ENCRYPTION_KEY`,
 `NORA_API_KEY_HASH_SECRET`, `NORA_AGENT_HUB_API_KEY_HASH_SECRET`, and
-`DB_PASSWORD`). New chart installs require distinct workspace/API and Agent Hub
+`DB_PASSWORD`). To enable the private Headmaster runtime-identity endpoint, set
+`secrets.runtimeIdentityToken` or include `NORA_HEADMASTER_RUNTIME_IDENTITY_TOKEN`
+in the existing Secret. New chart installs require distinct workspace/API and Agent Hub
 hash secrets. Upgrades whose older values contain only `apiKeyHashSecret` retain
 the legacy shared-key fallback until the operator supplies the dedicated value.
 
@@ -42,23 +44,24 @@ admin.
 
 ## Key values
 
-| Value                                   | Default                 | Meaning                                                                       |
-| --------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
-| `global.imageRegistry`                  | `ghcr.io/solomon2773`   | Registry for the published `nora-*` images                                    |
-| `global.imageTag`                       | `v<appVersion>`         | Image tag for all Nora services                                               |
-| `publicUrl`                             | `http://localhost:8080` | Public origin; feeds `NEXTAUTH_URL` + `CORS_ORIGINS`                          |
-| `enabledBackends`                       | `k8s`                   | Agent deploy targets (see limitations)                                        |
-| `secrets.*` / `secrets.existingSecret`  | —                       | Required credentials (see above)                                              |
-| `backendEnv`                            | `{}`                    | Extra non-secret env for backend-api + workers                                |
-| `frontendEnv`                           | `{}`                    | Explicit non-secret env shared by frontends; never inherits control-plane env |
-| `frontendMarketing.oauthExistingSecret` | `""`                    | Secret whose optional OAuth keys are exposed only to marketing                |
-| `kubeconfigs.existingSecret`            | `""`                    | Secret of kubeconfig files mounted at `/kubeconfigs` for agent deploy targets |
-| `postgresql.enabled` / `redis.enabled`  | `true`                  | In-chart data stores; disable and fill `*.external.*` to bring your own       |
-| `backupsVolume.*`                       | RWO 10Gi                | Shared volume for managed local backups                                       |
-| `ingress.*`                             | disabled                | Ingress in front of the `nora-nginx` Service                                  |
-| `nginx.service.type`                    | `ClusterIP`             | Switch to `LoadBalancer`/`NodePort` to expose directly                        |
-| `security.*`                            | non-root/read-only      | Pod/container security contexts for Nora application pods                     |
-| `availability.*`                        | enabled                 | Preferred node spreading and PDBs when a component has multiple replicas      |
+| Value                                   | Default                 | Meaning                                                                          |
+| --------------------------------------- | ----------------------- | -------------------------------------------------------------------------------- |
+| `global.imageRegistry`                  | `ghcr.io/solomon2773`   | Registry for the published `nora-*` images                                       |
+| `global.imageTag`                       | `v<appVersion>`         | Image tag for all Nora services                                                  |
+| `publicUrl`                             | `http://localhost:8080` | Public origin; feeds `NEXTAUTH_URL` + `CORS_ORIGINS`                             |
+| `enabledBackends`                       | `k8s`                   | Agent deploy targets (see limitations)                                           |
+| `secrets.*` / `secrets.existingSecret`  | —                       | Required credentials (see above)                                                 |
+| `secrets.runtimeIdentityToken`          | `""`                    | Optional 32+ character shared credential for Headmaster runtime-identity lookups |
+| `backendEnv`                            | `{}`                    | Extra non-secret env for backend-api + workers                                   |
+| `frontendEnv`                           | `{}`                    | Explicit non-secret env shared by frontends; never inherits control-plane env    |
+| `frontendMarketing.oauthExistingSecret` | `""`                    | Secret whose optional OAuth keys are exposed only to marketing                   |
+| `kubeconfigs.existingSecret`            | `""`                    | Secret of kubeconfig files mounted at `/kubeconfigs` for agent deploy targets    |
+| `postgresql.enabled` / `redis.enabled`  | `true`                  | In-chart data stores; disable and fill `*.external.*` to bring your own          |
+| `backupsVolume.*`                       | RWO 10Gi                | Shared volume for managed local backups                                          |
+| `ingress.*`                             | disabled                | Ingress in front of the `nora-nginx` Service                                     |
+| `nginx.service.type`                    | `ClusterIP`             | Switch to `LoadBalancer`/`NodePort` to expose directly                           |
+| `security.*`                            | non-root/read-only      | Pod/container security contexts for Nora application pods                        |
+| `availability.*`                        | enabled                 | Preferred node spreading and PDBs when a component has multiple replicas         |
 
 ## Design notes
 
@@ -81,6 +84,16 @@ admin.
   at `/run/secrets` for backend-api, workers, database-wait init containers, and
   bundled PostgreSQL. The Nora entrypoint loads valid env-named files; frontend
   pods receive only their explicit `frontendEnv`/component `env` allowlists.
+- **Headmaster runtime identity contract.** The private
+  `POST /api/integrations/headmaster/runtime-identity` endpoint accepts only a
+  SHA-256 digest and is marked `Cache-Control: no-store`. The configured service
+  token is control-plane-only and must never be forwarded to customer runtimes.
+  The consuming gateway must cap positive identity-cache age at 60 seconds,
+  keep negative caching short, coalesce concurrent lookups, and explicitly
+  invalidate cached identities on managed key rotation/revocation. After cache
+  expiry, a Nora outage must fail the request with 503 rather than accept stale
+  identity; this maximum 60-second key-rotation window is a gateway-client
+  requirement, not a cache implemented by the Nora API.
 - **Typed deployment invariants cannot be shadowed.** `backendEnv` and `commonEnv`
   reject canonical keys such as `ENABLED_BACKENDS`, `PLATFORM_MODE`, database,
   and Redis coordinates. Configure those through their typed chart values so a

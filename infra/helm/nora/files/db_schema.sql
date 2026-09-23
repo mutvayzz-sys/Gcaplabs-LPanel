@@ -53,6 +53,30 @@ CREATE TABLE IF NOT EXISTS agents (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS agent_runtime_credentials (
+  agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  generation BIGINT NOT NULL CHECK (generation > 0),
+  key_digest TEXT NOT NULL CHECK (key_digest ~ '^[0-9a-f]{64}$'),
+  credential_state TEXT NOT NULL CHECK (credential_state IN ('desired', 'active', 'retired')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  activated_at TIMESTAMPTZ,
+  retired_at TIMESTAMPTZ,
+  PRIMARY KEY(agent_id, generation),
+  CONSTRAINT agent_runtime_credentials_digest_unique UNIQUE(key_digest),
+  CONSTRAINT agent_runtime_credentials_state_timestamps_check CHECK (
+    (credential_state = 'desired' AND activated_at IS NULL AND retired_at IS NULL)
+    OR (credential_state = 'active' AND activated_at IS NOT NULL AND retired_at IS NULL)
+    OR (credential_state = 'retired' AND retired_at IS NOT NULL)
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS agent_runtime_credentials_one_active_idx
+  ON agent_runtime_credentials(agent_id) WHERE credential_state = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS agent_runtime_credentials_one_desired_idx
+  ON agent_runtime_credentials(agent_id) WHERE credential_state = 'desired';
+CREATE INDEX IF NOT EXISTS agent_runtime_credentials_agent_state_idx
+  ON agent_runtime_credentials(agent_id, credential_state, generation DESC);
+
 CREATE TABLE IF NOT EXISTS kubernetes_clusters (
   id TEXT PRIMARY KEY,
   label TEXT NOT NULL,
@@ -283,6 +307,17 @@ CREATE TABLE IF NOT EXISTS agent_secret_overrides (
 
 CREATE INDEX IF NOT EXISTS idx_agent_secret_overrides_agent
   ON agent_secret_overrides(agent_id, env_key);
+
+CREATE TABLE IF NOT EXISTS agent_managed_config (
+  agent_id UUID PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+  desired_revision INTEGER NOT NULL DEFAULT 0 CHECK (desired_revision >= 0),
+  applied_revision INTEGER NOT NULL DEFAULT 0 CHECK (applied_revision >= 0 AND applied_revision <= desired_revision),
+  headmaster_integration_config JSONB,
+  last_job_id TEXT,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS hermes_runtime_state (
   agent_id UUID PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,

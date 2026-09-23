@@ -2,6 +2,10 @@
 const crypto = require("crypto");
 const { startAdvisoryLockHoldWatchdog } = require("../../backend-api/lib/advisoryLocks.ts");
 const { markAgentManagedConfigApplied } = require("../../backend-api/agentManagedConfig");
+const {
+  activateRuntimeCredential,
+  stageDesiredRuntimeCredential,
+} = require("../../backend-api/runtimeIdentity");
 
 function normalizeProviderConfig(config) {
   if (typeof config !== "string") return config ?? null;
@@ -158,6 +162,7 @@ async function persistProvisionedRuntimeMetadata(
     host,
     backendType,
     gatewayToken,
+    gatewayTokenDigest,
     containerName,
     gatewayHostPort,
     runtimeHost,
@@ -174,62 +179,120 @@ async function persistProvisionedRuntimeMetadata(
     dashboardPort,
   } = {},
 ) {
-  const result = await queryable.query(
-    `UPDATE agents
-        SET container_id = $2,
-            host = $3,
-            backend_type = $4,
-            gateway_token = $5,
-            container_name = COALESCE($6, container_name),
-            gateway_host_port = $7,
-            runtime_host = $8,
-            runtime_port = $9,
-            gateway_host = $10,
-            gateway_port = $11,
-            image = COALESCE($12, image),
-            runtime_family = $13,
-            deploy_target = $14,
-            execution_target_id = $15,
-            sandbox_profile = $16,
-            sandbox_type = $17,
-            network_policy_status = $18,
-            dashboard_port = $19
-      WHERE id = $1
-        AND status = 'deploying'
-        AND (container_id IS NULL OR container_id = $2)
-      RETURNING id, container_id`,
-    [
-      agentId,
-      containerId,
-      host,
-      backendType,
-      gatewayToken,
-      containerName || null,
-      gatewayHostPort ? parseInt(gatewayHostPort, 10) : null,
-      runtimeHost || null,
-      runtimePort ? parseInt(runtimePort, 10) : null,
-      gatewayHost || null,
-      gatewayPort ? parseInt(gatewayPort, 10) : null,
-      image || null,
-      runtimeFamily,
-      deployTarget,
-      executionTargetId,
-      sandboxProfile,
-      sandboxType,
-      networkPolicyStatus,
-      dashboardPort ? parseInt(dashboardPort, 10) : null,
-    ],
-  );
+  const ownsClient = typeof queryable?.connect === "function";
+  const client = ownsClient ? await queryable.connect() : queryable;
+  let transactionOpen = false;
+  try {
+    await client.query("BEGIN");
+    transactionOpen = true;
+    const currentResult = await client.query(
+      `SELECT id, container_id, external_id_namespace, external_owner_id
+         FROM agents
+        WHERE id = $1
+          AND status = 'deploying'
+          AND (container_id IS NULL OR container_id = $2)
+        FOR UPDATE`,
+      [agentId, containerId],
+    );
+    const current = currentResult.rows?.[0];
+    if (!current) {
+      await client.query("ROLLBACK");
+      transactionOpen = false;
+      return { persisted: false, containerId: null, runtimeCredentialGeneration: null };
+    }
 
-  return {
-    persisted: Boolean(result.rows[0]),
-    containerId: result.rows[0]?.container_id || null,
-  };
+    let runtimeCredentialGeneration = null;
+    if (current.external_id_namespace === "headmaster") {
+      if (!current.external_owner_id) {
+        throw new Error("Headmaster runtime identity is missing its immutable owner binding");
+      }
+      if (!gatewayTokenDigest) {
+        throw new Error("Headmaster runtime credential digest is required before activation");
+      }
+      runtimeCredentialGeneration = await stageDesiredRuntimeCredential(
+        client,
+        agentId,
+        gatewayTokenDigest,
+      );
+    }
+
+    const result = await client.query(
+      `UPDATE agents
+          SET container_id = $2,
+              host = $3,
+              backend_type = $4,
+              gateway_token = $5,
+              container_name = COALESCE($6, container_name),
+              gateway_host_port = $7,
+              runtime_host = $8,
+              runtime_port = $9,
+              gateway_host = $10,
+              gateway_port = $11,
+              image = COALESCE($12, image),
+              runtime_family = $13,
+              deploy_target = $14,
+              execution_target_id = $15,
+              sandbox_profile = $16,
+              sandbox_type = $17,
+              network_policy_status = $18,
+              dashboard_port = $19
+        WHERE id = $1
+          AND status = 'deploying'
+          AND (container_id IS NULL OR container_id = $2)
+        RETURNING id, container_id`,
+      [
+        agentId,
+        containerId,
+        host,
+        backendType,
+        gatewayToken,
+        containerName || null,
+        gatewayHostPort ? parseInt(gatewayHostPort, 10) : null,
+        runtimeHost || null,
+        runtimePort ? parseInt(runtimePort, 10) : null,
+        gatewayHost || null,
+        gatewayPort ? parseInt(gatewayPort, 10) : null,
+        image || null,
+        runtimeFamily,
+        deployTarget,
+        executionTargetId,
+        sandboxProfile,
+        sandboxType,
+        networkPolicyStatus,
+        dashboardPort ? parseInt(dashboardPort, 10) : null,
+      ],
+    );
+    if (!result.rows?.[0]) {
+      await client.query("ROLLBACK");
+      transactionOpen = false;
+      return { persisted: false, containerId: null, runtimeCredentialGeneration: null };
+    }
+    await client.query("COMMIT");
+    transactionOpen = false;
+    return {
+      persisted: true,
+      containerId: result.rows[0].container_id || null,
+      runtimeCredentialGeneration,
+    };
+  } catch (error) {
+    if (transactionOpen) await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    if (ownsClient && typeof client?.release === "function") client.release();
+  }
 }
 
 async function finalizeProvisionedDeployment(
   queryable,
-  { agentId, containerId, name, backend, host, managedConfigRevision = 0 } = {},
+  {
+    agentId,
+    containerId,
+    name,
+    backend,
+    host,
+    managedConfigRevision = 0,
+    runtimeCredentialGeneration = null,
+  } = {},
 ) {
   const ownsClient = typeof queryable?.connect === "function";
   const client = ownsClient ? await queryable.connect() : queryable;
@@ -245,7 +308,7 @@ async function finalizeProvisionedDeployment(
         WHERE id = $1
           AND status = 'deploying'
           AND container_id = $2
-        RETURNING id`,
+        RETURNING id, external_id_namespace`,
       [agentId, containerId],
     );
     if (!agentUpdate.rows[0]) {
@@ -266,10 +329,16 @@ async function finalizeProvisionedDeployment(
       throw new Error(`Deployment ${agentId} was not in deploying state during finalization`);
     }
 
+    if (agentUpdate.rows[0].external_id_namespace === "headmaster") {
+      await activateRuntimeCredential(client, agentId, runtimeCredentialGeneration);
+    }
+
     if (managedConfigRevision > 0) {
       const applied = await markAgentManagedConfigApplied(client, agentId, managedConfigRevision);
       if (!applied) {
-        throw new Error("The managed configuration revision changed before runtime activation completed");
+        throw new Error(
+          "The managed configuration revision changed before runtime activation completed",
+        );
       }
     }
 

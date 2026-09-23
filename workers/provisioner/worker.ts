@@ -113,6 +113,7 @@ const {
   shouldReconcileEffectiveProviderState,
 } = require("./deploymentLifecycle");
 const { shellSingleQuote } = require("../../agent-runtime/lib/containerCommand");
+const { digestRuntimeKey } = require("../../backend-api/runtimeIdentity");
 const {
   computeMissingSavedSkills,
   computeOrphanedInstalledSkills,
@@ -5038,6 +5039,7 @@ const worker = new Worker(
           host,
           backendType: resolvedRuntimeFields.backend_type,
           gatewayToken: gatewayTokenForStorage,
+          gatewayTokenDigest: gatewayToken ? digestRuntimeKey(gatewayToken) : null,
           containerName,
           gatewayHostPort,
           runtimeHost,
@@ -5168,6 +5170,8 @@ const worker = new Worker(
                         backend: resolvedBackend,
                         host,
                         managedConfigRevision,
+                        runtimeCredentialGeneration:
+                          metadataPersistence.runtimeCredentialGeneration,
                       }),
                     ),
                 })
@@ -5181,6 +5185,7 @@ const worker = new Worker(
                 backend: resolvedBackend,
                 host,
                 managedConfigRevision,
+                runtimeCredentialGeneration: metadataPersistence.runtimeCredentialGeneration,
               }),
             ),
         });

@@ -182,9 +182,13 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
     const createRequestKeyIndex = identityIndexes.rows.find(
       (row) => row.indexname === "agents_create_request_key_unique_idx",
     );
-    expect(externalIdentityIndex?.indexdef).toMatch(/UNIQUE INDEX.*\(user_id, external_id_namespace, external_id\)/i);
+    expect(externalIdentityIndex?.indexdef).toMatch(
+      /UNIQUE INDEX.*\(user_id, external_id_namespace, external_id\)/i,
+    );
     expect(externalIdentityIndex?.indexdef).not.toMatch(/status/i);
-    expect(createRequestKeyIndex?.indexdef).toMatch(/UNIQUE INDEX.*\(user_id, create_request_key\)/i);
+    expect(createRequestKeyIndex?.indexdef).toMatch(
+      /UNIQUE INDEX.*\(user_id, create_request_key\)/i,
+    );
 
     const identityConstraints = await migrationPool.query(
       `SELECT conname
@@ -198,6 +202,40 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
     expect(constraintNames.has("agents_create_request_pair_check")).toBe(true);
     expect(constraintNames.has("agents_create_request_key_nonempty_check")).toBe(true);
     expect(constraintNames.has("agents_create_request_fingerprint_sha256_check")).toBe(true);
+
+    const runtimeCredentialColumns = await migrationPool.query(
+      `SELECT column_name, data_type
+         FROM information_schema.columns
+        WHERE table_schema = $1
+          AND table_name = 'agent_runtime_credentials'
+        ORDER BY ordinal_position`,
+      [schemaName],
+    );
+    expect(runtimeCredentialColumns.rows).toEqual([
+      { column_name: "agent_id", data_type: "uuid" },
+      { column_name: "generation", data_type: "bigint" },
+      { column_name: "key_digest", data_type: "text" },
+      { column_name: "credential_state", data_type: "text" },
+      { column_name: "created_at", data_type: "timestamp with time zone" },
+      { column_name: "activated_at", data_type: "timestamp with time zone" },
+      { column_name: "retired_at", data_type: "timestamp with time zone" },
+    ]);
+    const runtimeCredentialIndexes = await migrationPool.query(
+      `SELECT indexname, indexdef
+         FROM pg_indexes
+        WHERE schemaname = $1 AND tablename = 'agent_runtime_credentials'`,
+      [schemaName],
+    );
+    const digestIndex = runtimeCredentialIndexes.rows.find((row) =>
+      row.indexdef.includes("(key_digest)"),
+    );
+    expect(digestIndex?.indexdef).toMatch(/UNIQUE INDEX.*\(key_digest\)/i);
+    expect(runtimeCredentialIndexes.rows.map((row) => row.indexname)).toContain(
+      "agent_runtime_credentials_one_active_idx",
+    );
+    expect(runtimeCredentialIndexes.rows.map((row) => row.indexname)).toContain(
+      "agent_runtime_credentials_one_desired_idx",
+    );
 
     const outboxColumns = await migrationPool.query(
       `SELECT table_name, column_name, data_type
@@ -213,9 +251,21 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
       { table_name: "deployments", column_name: "job_payload", data_type: "jsonb" },
       { table_name: "deployments", column_name: "queue_job_id", data_type: "text" },
       { table_name: "external_agent_create_requests", column_name: "agent_id", data_type: "uuid" },
-      { table_name: "external_agent_create_requests", column_name: "deployment_id", data_type: "uuid" },
-      { table_name: "external_agent_create_requests", column_name: "request_fingerprint", data_type: "text" },
-      { table_name: "external_agent_create_requests", column_name: "request_key", data_type: "text" },
+      {
+        table_name: "external_agent_create_requests",
+        column_name: "deployment_id",
+        data_type: "uuid",
+      },
+      {
+        table_name: "external_agent_create_requests",
+        column_name: "request_fingerprint",
+        data_type: "text",
+      },
+      {
+        table_name: "external_agent_create_requests",
+        column_name: "request_key",
+        data_type: "text",
+      },
       { table_name: "external_agent_create_requests", column_name: "user_id", data_type: "uuid" },
     ]);
 
@@ -245,9 +295,37 @@ describeWithPostgres("PostgreSQL legacy migration gate", () => {
         [ownerUserId, status, externalId, externalOwnerId, requestKey, fingerprint],
       );
 
+    const runtimeOwnerA = await insertExternalAgent({
+      externalId: "33333333-3333-4333-8333-333333333333",
+      requestKey: "runtime-credential-a",
+      fingerprint: "d".repeat(64),
+    });
+    const runtimeOwnerB = await insertExternalAgent({
+      externalId: "44444444-4444-4444-8444-444444444444",
+      requestKey: "runtime-credential-b",
+      fingerprint: "e".repeat(64),
+    });
+    const duplicateRuntimeDigest = "f".repeat(64);
+    await migrationPool.query(
+      `INSERT INTO agent_runtime_credentials(agent_id, generation, key_digest, credential_state, activated_at)
+       VALUES($1, 1, $2, 'active', NOW())`,
+      [runtimeOwnerA.rows[0].id, duplicateRuntimeDigest],
+    );
+    await expect(
+      migrationPool.query(
+        `INSERT INTO agent_runtime_credentials(agent_id, generation, key_digest, credential_state)
+         VALUES($1, 1, $2, 'desired')`,
+        [runtimeOwnerB.rows[0].id, duplicateRuntimeDigest],
+      ),
+    ).rejects.toMatchObject({ code: "23505" });
+
     await insertExternalAgent();
     await expect(
-      insertExternalAgent({ status: "deleted", requestKey: "create-key-b", fingerprint: "b".repeat(64) }),
+      insertExternalAgent({
+        status: "deleted",
+        requestKey: "create-key-b",
+        fingerprint: "b".repeat(64),
+      }),
     ).rejects.toMatchObject({ code: "23505" });
     await expect(
       insertExternalAgent({

@@ -464,9 +464,17 @@ test("Helm keeps secrets out of frontends and mounts them into control-plane pod
   const backend = read("infra/helm/nora/templates/backend-api.yaml");
   const workers = read("infra/helm/nora/templates/workers.yaml");
   const postgres = read("infra/helm/nora/templates/postgres.yaml");
+  const secretEnv = read("infra/helm/nora/templates/secret-env.yaml");
+  const values = read("infra/helm/nora/values.yaml");
 
   assert.doesNotMatch(frontends, /nora\.extraEnv[^\n]+Values\.commonEnv/);
   assert.match(frontends, /Values\.frontendEnv/);
+  assert.doesNotMatch(frontends, /runtimeIdentityToken|NORA_HEADMASTER_RUNTIME_IDENTITY_TOKEN/);
+  assert.match(
+    secretEnv,
+    /NORA_HEADMASTER_RUNTIME_IDENTITY_TOKEN:\s*\{\{\s*\.Values\.secrets\.runtimeIdentityToken/,
+  );
+  assert.match(values, /runtimeIdentityToken:\s*""/);
   assert.doesNotMatch(helpers, /secretRef:/);
   assert.match(helpers, /mountPath: \/run\/secrets/);
   assert.match(backend, /mountPath: \/run\/secrets/);

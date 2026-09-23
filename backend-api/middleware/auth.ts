@@ -1,6 +1,29 @@
 // @ts-nocheck
 const jwt = require("jsonwebtoken");
+const crypto = require("node:crypto");
 const { readAuthCookie } = require("../authCookie");
+const { RUNTIME_IDENTITY_SCOPE } = require("../runtimeIdentity");
+
+const SERVICE_SCOPE_DEFINITIONS = new Set([RUNTIME_IDENTITY_SCOPE]);
+const HEADMASTER_RUNTIME_IDENTITY_TOKEN_ENV = "NORA_HEADMASTER_RUNTIME_IDENTITY_TOKEN";
+const HEADMASTER_RUNTIME_IDENTITY_PATHS = new Set([
+  "/integrations/headmaster/runtime-identity",
+  "/api/integrations/headmaster/runtime-identity",
+]);
+
+function isHeadmasterRuntimeIdentityRequest(req) {
+  if (String(req?.method || "").toUpperCase() !== "POST") return false;
+  const path = String(req?.path || req?.originalUrl || "").split("?", 1)[0];
+  return HEADMASTER_RUNTIME_IDENTITY_PATHS.has(path);
+}
+
+function serviceTokenMatches(presented, configured) {
+  if (typeof presented !== "string" || typeof configured !== "string") return false;
+  if (configured.length < 32 || /\s/.test(configured)) return false;
+  const presentedDigest = crypto.createHash("sha256").update(presented, "utf8").digest();
+  const configuredDigest = crypto.createHash("sha256").update(configured, "utf8").digest();
+  return crypto.timingSafeEqual(presentedDigest, configuredDigest);
+}
 
 // Session and API-key authentication
 
@@ -90,6 +113,39 @@ async function authenticateToken(req, res, next) {
       error: "Invalid authentication header",
       code: "invalid_auth_header",
     });
+  }
+
+  // The N3 identity route accepts only its dedicated service bearer. Do not
+  // fall back to a Nora operator session, API key, or browser cookie here.
+  if (isHeadmasterRuntimeIdentityRequest(req)) {
+    const configured = process.env[HEADMASTER_RUNTIME_IDENTITY_TOKEN_ENV];
+    if (!configured || configured.length < 32 || /\s/.test(configured)) {
+      return res
+        .status(503)
+        .json({ error: "Runtime identity service authentication is unavailable" });
+    }
+    if (explicit.source !== "authorization" || !explicit.token) {
+      return res.status(401).json({ error: "Headmaster service authentication required" });
+    }
+    if (!serviceTokenMatches(explicit.token, configured)) {
+      return res.status(401).json({ error: "Invalid Headmaster service credential" });
+    }
+    req.servicePrincipal = Object.freeze({
+      id: "headmaster",
+      service: "headmaster",
+      scopes: Object.freeze([RUNTIME_IDENTITY_SCOPE]),
+    });
+    return next();
+  }
+
+  // Prevent the dedicated service bearer from being replayed as an operator
+  // or workspace credential on any other route.
+  const configuredServiceToken = process.env[HEADMASTER_RUNTIME_IDENTITY_TOKEN_ENV];
+  if (
+    explicit.source === "authorization" &&
+    serviceTokenMatches(explicit.token, configuredServiceToken)
+  ) {
+    return res.status(401).json({ error: "Service credential is not valid for this endpoint" });
   }
 
   // Explicit Authorization/API-key headers always win over the browser cookie.
@@ -205,6 +261,22 @@ function scopeByMethod(readScope, writeScope) {
   };
 }
 
+function requireServiceScope(requiredScope) {
+  if (!SERVICE_SCOPE_DEFINITIONS.has(requiredScope)) {
+    throw new Error(`Unknown Nora service scope: ${requiredScope}`);
+  }
+  return (req, res, next) => {
+    const scopes = Array.isArray(req.servicePrincipal?.scopes) ? req.servicePrincipal.scopes : [];
+    if (!req.servicePrincipal || !scopes.includes(requiredScope)) {
+      return res.status(403).json({
+        error: `Service principal is missing the "${requiredScope}" scope`,
+        code: "missing_service_scope",
+      });
+    }
+    next();
+  };
+}
+
 /**
  * Reject API-key-authenticated requests from a session-only route.
  *
@@ -228,6 +300,7 @@ module.exports = {
   extractExplicitAuth,
   requireAdmin,
   requireScope,
+  requireServiceScope,
   requireSession,
   scopeByMethod,
 };
