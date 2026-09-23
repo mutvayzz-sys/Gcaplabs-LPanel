@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "status": "n0-source-prepared-not-built",
+  "observed_at": "2026-09-23",
+  "source": {
+    "upstream_repository": "https://github.com/solomon2773/nora.git",
+    "upstream_base_commit": "40322503991fb9216d91e888a3834ea33b85d4a4",
+    "owner_fork_repository": "https://github.com/mutvayzz-sys/nora-base.git",
+    "owner_fork_master_observed_commit": "4b49eba6080af79ea810faa7609c7bfe67381fcc",
+    "upstream_master_observed_commit": "358b1beeaf683f76d488b113adbdfc59c52d6779",
+    "headmaster_commit": null,
+    "working_tree_changes": [
+      "workers/provisioner/backends/docker.ts",
+      "workers/provisioner/backends/hermes.ts",
+      "workers/provisioner/healthChecks.ts",
+      "workers/provisioner/worker.ts",
+      "workers/provisioner/package.json",
+      "workers/provisioner/backendSelection.test.js",
+      "workers/provisioner/provisionerExecTermination.test.js",
+      "backend-api/__tests__/provisioning.test.ts",
+      "backend-api/__tests__/provisionerProviderSelection.test.ts"
+    ],
+    "api_and_worker_same_commit": null
+  },
+  "runtime": {
+    "image": "nousresearch/hermes-agent:v2026.9.21",
+    "version": "0.21.4",
+    "digest": "sha256:6bece0644e29a347e5ae17db43c36938c86f171c6f5e0cef18aa2075d331f3a3"
+  },
+  "migrations": {
+    "nora_migrations_added": [],
+    "production_nora_migration_state": "not changed by N0; current state not independently recorded here",
+    "disposable_fixture": {
+      "base_commit": "40322503991fb9216d91e888a3834ea33b85d4a4",
+      "upstream_migrations_applied": 244
+    },
+    "headmaster_supabase_migrations": {
+      "applied_through": "20260923021624",
+      "unapplied_drafts": ["20260923030644", "20260923030810"]
+    }
+  },
+  "images": {
+    "production_rollback_observed_2026_09_23": {
+      "api": {
+        "image": "nora-backend-api",
+        "digest": "sha256:20394ce66e4e56469d5c6f36b5a50acd627c5d27d4d64365618f0a3b5981be98",
+        "source_revision_label": null,
+        "source_mount": "read-only /opt/nora"
+      },
+      "worker": {
+        "image": "nora-worker-provisioner",
+        "digest": "sha256:2a8473ce7f5d3886d9395f5b457ca2f1769dad60d2abac31be8d45b6e8b7ada1",
+        "source_revision_label": null,
+        "source_mount": null,
+        "provisioner_file_hashes_match_adopted_patch": true
+      }
+    },
+    "candidate": {
+      "api_image": null,
+      "api_digest": null,
+      "worker_image": null,
+      "worker_digest": null,
+      "source_revision_label": null,
+      "build_from_same_headmaster_commit": null
+    }
+  },
+  "release_state": {
+    "production_changed": false,
+    "migration_applied": false,
+    "commit_created": false,
+    "push_created": false,
+    "disposable_hermes_lifecycle_acceptance": "pending"
+  }
+}

@@ -59,6 +59,9 @@ async function waitForHttpReady(url, options = {}) {
     attempts,
     status: lastStatus,
     error: lastError?.message || "unreachable",
+    errorCode: lastError?.cause?.code || lastError?.code || null,
+    errorAddress: lastError?.cause?.address || null,
+    errorPort: lastError?.cause?.port || null,
   };
 }
 

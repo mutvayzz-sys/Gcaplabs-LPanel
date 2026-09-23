@@ -37,7 +37,7 @@ function loadWorkerForExecTests() {
   class StubClient {}
 
   Module._load = function loadWorkerDependency(request, parent) {
-    if (parent?.filename?.endsWith(workerSuffix)) {
+    if (parent?.filename?.replaceAll("\\", "/").endsWith(workerSuffix)) {
       if (request === "bullmq") {
         return {
           Worker: StubWorker,

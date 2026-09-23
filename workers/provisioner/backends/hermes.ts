@@ -59,7 +59,6 @@ function buildHermesStartCommand() {
     buildHermesRuntimeConfigBootstrapCommand(),
     `HERMES_BIN="${HERMES_BIN}"`,
     '[ -x "$HERMES_BIN" ] || HERMES_BIN="$(command -v hermes)"',
-    `nohup "$HERMES_BIN" dashboard --host 0.0.0.0 --no-open >> ${HERMES_DASHBOARD_LOG} 2>&1 &`,
     'exec "$HERMES_BIN" gateway run',
   ].join("\n");
 }
@@ -237,6 +236,15 @@ class HermesBackend extends DockerBackend {
       API_SERVER_ENABLED: "true",
       API_SERVER_HOST: "0.0.0.0",
       API_SERVER_PORT: String(HERMES_RUNTIME_PORT),
+      // Do not let an agent inherit the Nora host's EC2 instance-role identity.
+      // Provider credentials are resolved and injected by Nora. This also keeps
+      // Botocore from waiting on a blocked link-local metadata endpoint when an
+      // auto-selected provider checks its credential chain. HERMES_DISABLE_*
+      // seals the image venv; the pinned runtime may still install optional
+      // packages into its explicit writable lazy-install target.
+      AWS_EC2_METADATA_DISABLED: "true",
+      HERMES_DISABLE_LAZY_INSTALLS: "1",
+      HERMES_NONINTERACTIVE: "1",
       // Bake the gateway API key into the container environment so the
       // s6-supervised gateway service — which reads /run/s6/container_environment,
       // not the sourced managed-env file — inherits it on every boot, including
@@ -251,6 +259,10 @@ class HermesBackend extends DockerBackend {
       HERMES_DASHBOARD_BASIC_AUTH_USERNAME: dashboardAuth.username,
       HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: dashboardAuth.password,
       HERMES_DASHBOARD_BASIC_AUTH_SECRET: dashboardAuth.secret,
+      // GCAP patch (0002): let the image's s6 service supervise the dashboard
+      // (restart on death). The start command below must NOT also nohup a
+      // dashboard — two dashboards would fight over port 9119.
+      HERMES_DASHBOARD: "1",
       GATEWAY_HEALTH_URL: `http://127.0.0.1:${HERMES_RUNTIME_PORT}`,
       MESSAGING_CWD: HERMES_WORKSPACE,
       TERMINAL_CWD: HERMES_WORKSPACE,
