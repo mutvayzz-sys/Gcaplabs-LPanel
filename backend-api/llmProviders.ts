@@ -522,6 +522,62 @@ async function getDeploymentProvider(userId, providerId = null, queryable = db) 
 }
 
 /**
+ * Resolve exactly one server-selected provider for the isolated Headmaster
+ * inference relay. The account-to-Nora/provider mapping is supplied by the
+ * trusted integration policy; this function never accepts a client-selected
+ * provider id. Only the selected encrypted row is read and decrypted.
+ *
+ * @param {string} userId - Trusted Nora owner id from the server mapping.
+ * @param {string} providerId - Trusted provider row id from that mapping.
+ * @param {Object} [queryable=db] - Restricted read-only database client.
+ * @returns {Promise<Object>} Server-only provider material for one request.
+ */
+async function resolveInferenceProvider(userId, providerId, queryable = db) {
+  const provider = await getDeploymentProvider(userId, providerId, queryable);
+  if (!provider) return null;
+
+  const definition = PROVIDERS.find((candidate) => candidate.id === provider.provider);
+  if (!definition) {
+    const error = new Error("Inference provider is not supported");
+    error.code = "INFERENCE_PROVIDER_UNSUPPORTED";
+    throw error;
+  }
+
+  const credentialResult = await queryable.query(
+    `SELECT api_key
+       FROM llm_providers
+      WHERE user_id = $1 AND id = $2
+      LIMIT 1`,
+    [userId, provider.id],
+  );
+  const encryptedKey = credentialResult.rows[0]?.api_key;
+  if (typeof encryptedKey !== "string" || !encryptedKey) {
+    const error = new Error("Inference provider credential is unavailable");
+    error.code = "INFERENCE_PROVIDER_CREDENTIAL_UNAVAILABLE";
+    throw error;
+  }
+
+  const apiKey = decrypt(encryptedKey);
+  if (typeof apiKey !== "string" || !apiKey) {
+    const error = new Error("Inference provider credential is unreadable");
+    error.code = "INFERENCE_PROVIDER_CREDENTIAL_UNAVAILABLE";
+    throw error;
+  }
+
+  const config = parseProviderConfig(provider.config);
+  return {
+    id: provider.id,
+    provider: provider.provider,
+    model: provider.model || null,
+    models: Array.isArray(definition.models) ? [...definition.models] : [],
+    apiKey,
+    baseUrl: pickConfigBaseUrl(config) || definition.endpoint || "",
+    apiVersion: pickConfigApiVersion(config) || "",
+    deployment: pickConfigDeployment(config, provider.model),
+  };
+}
+
+/**
  * Update an owner-scoped provider under the per-user mutation lock, encrypting
  * replacement credentials and atomically ensuring a default when possible.
  *
@@ -830,6 +886,7 @@ module.exports = {
   providerMutationLockKey,
   withProviderStateLock,
   getDeploymentProvider,
+  resolveInferenceProvider,
   updateProvider,
   deleteProvider,
   getProviderKeys,

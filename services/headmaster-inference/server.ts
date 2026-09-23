@@ -1,0 +1,83 @@
+// @ts-nocheck
+// The relay is a separate non-agent process. It imports only Nora's existing
+// provider resolver/storage code; it does not import runtime or Docker code.
+const path = require('node:path')
+const Module = require('node:module')
+
+const serviceNodeModules = path.resolve(__dirname, 'node_modules')
+process.env.NODE_PATH = [process.env.NODE_PATH, serviceNodeModules].filter(Boolean).join(path.delimiter)
+Module._initPaths()
+
+const { resolveInferenceProvider } = require('../../backend-api/llmProviders.ts')
+const db = require('../../backend-api/db.ts')
+const { createRedisClient } = require('../../backend-api/lib/connectionConfig.ts')
+const IORedis = require('ioredis')
+const { parseAccountProviderMap } = require('./policy.mjs')
+const { createRedisReplayStore } = require('./assertion.mjs')
+const { createRedisQuotaStore } = require('./quota.mjs')
+const { createInferenceService } = require('./lib.mjs')
+
+function positiveInt(value, fallback, max) {
+  const parsed = Number.parseInt(String(value || ''), 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+  return Math.min(parsed, max)
+}
+
+function requiredSecret() {
+  const secret = String(process.env.HEADMASTER_INFERENCE_ASSERTION_SECRET || '')
+  if (Buffer.byteLength(secret) < 32) throw new Error('assertion_secret_invalid')
+  return secret
+}
+
+async function main() {
+  const accountProviderMap = parseAccountProviderMap(process.env.HEADMASTER_INFERENCE_ACCOUNT_MAP || '')
+  const redis = createRedisClient(IORedis, process.env, {
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    lazyConnect: false,
+  })
+  redis.on('error', error => {
+    console.warn('headmaster-inference redis connection unavailable', { code: error?.code || 'redis_error' })
+  })
+  await redis.ping()
+  await db.query('SELECT 1')
+
+  const quotaStore = createRedisQuotaStore(redis, {
+    maxConcurrentPerAccount: positiveInt(process.env.HEADMASTER_INFERENCE_MAX_CONCURRENT, 3, 100),
+    maxRequestsPerHour: positiveInt(process.env.HEADMASTER_INFERENCE_REQUESTS_PER_HOUR, 120, 100_000),
+    maxCompletionTokensPerDay: positiveInt(process.env.HEADMASTER_INFERENCE_OUTPUT_TOKENS_PER_DAY, 120_000, 100_000_000),
+  })
+  const service = createInferenceService({
+    assertionSecret: requiredSecret(),
+    accountProviderMap,
+    resolveProvider: (noraUserId, providerId) => resolveInferenceProvider(noraUserId, providerId, db),
+    quotaStore,
+    replayStore: createRedisReplayStore(redis),
+    maxRequestBytes: positiveInt(process.env.HEADMASTER_INFERENCE_MAX_REQUEST_BYTES, 36 * 1024 * 1024, 36 * 1024 * 1024),
+    maxCompletionTokens: positiveInt(process.env.HEADMASTER_INFERENCE_MAX_COMPLETION_TOKENS, 4096, 32_768),
+    defaultCompletionTokens: positiveInt(process.env.HEADMASTER_INFERENCE_DEFAULT_COMPLETION_TOKENS, 1024, 32_768),
+    requestTimeoutMs: positiveInt(process.env.HEADMASTER_INFERENCE_TIMEOUT_MS, 120_000, 600_000),
+    logger: console,
+  })
+  const listen = process.env.HEADMASTER_INFERENCE_LISTEN || '0.0.0.0:8781'
+  const splitAt = listen.lastIndexOf(':')
+  const host = listen.slice(0, splitAt)
+  const port = Number(listen.slice(splitAt + 1))
+  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('listen_address_invalid')
+
+  service.server.listen(port, host, () => {
+    console.log(`headmaster-inference listening on ${host}:${port}`)
+  })
+  const shutdown = () => {
+    service.server.close(() => {
+      void Promise.allSettled([redis.quit(), db.end()]).finally(() => process.exit(0))
+    })
+  }
+  process.once('SIGTERM', shutdown)
+  process.once('SIGINT', shutdown)
+}
+
+main().catch(error => {
+  console.error('headmaster-inference startup failed', { code: error?.code || error?.message || 'startup_failed' })
+  process.exit(1)
+})
