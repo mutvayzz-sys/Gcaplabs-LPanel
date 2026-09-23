@@ -5,11 +5,12 @@ const MAX_NAMESPACE_LENGTH = 64;
 const CANONICAL_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export interface AuthenticatedIntegrationPrincipal {
+  readonly managementUserId: string;
   readonly ownerUuid: string;
 }
 
 export interface ExternalAgentIdentityInput {
-  readonly user_id: unknown;
+  readonly user_id?: unknown;
   readonly namespace?: unknown;
   readonly external_id: unknown;
   readonly owner_uuid?: unknown;
@@ -67,13 +68,21 @@ export function normalizeExternalAgentIdentity(
     throw new TypeError(`External agent namespace must be '${EXTERNAL_AGENT_NAMESPACE}'`);
   }
 
+  const managementUserId = requireCanonicalUuid(
+    principal.managementUserId,
+    "Authenticated Nora management user UUID",
+  );
+  if (input.user_id !== undefined && input.user_id !== managementUserId) {
+    throw new TypeError("Caller-supplied Nora management user ID does not match the authenticated principal");
+  }
+
   const ownerUuid = requireCanonicalUuid(principal.ownerUuid, "Authenticated principal owner UUID");
   if (input.owner_uuid !== undefined && input.owner_uuid !== ownerUuid) {
     throw new TypeError("Caller-supplied owner UUID does not match the authenticated integration principal");
   }
 
   return Object.freeze({
-    user_id: requireNonEmptyString(input.user_id, "user_id"),
+    user_id: managementUserId,
     namespace: EXTERNAL_AGENT_NAMESPACE,
     external_id: requireCanonicalUuid(input.external_id, "External agent external ID"),
     owner_uuid: ownerUuid,

@@ -8,7 +8,8 @@ const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
 const OWNER_UUID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const OTHER_OWNER_UUID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const principal = { ownerUuid: OWNER_UUID };
+const OTHER_USER_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const principal = { managementUserId: USER_ID, ownerUuid: OWNER_UUID };
 
 const request = {
   user_id: USER_ID,
@@ -20,7 +21,7 @@ const request = {
 };
 
 describe("external agent identity normalization", () => {
-  it("accepts a canonical workspace UUID and takes owner identity from the principal", () => {
+  it("accepts a canonical workspace UUID and takes ownership from the authenticated principal", () => {
     expect(normalizeExternalAgentIdentity(request, principal)).toEqual({
       user_id: USER_ID,
       namespace: "headmaster",
@@ -29,6 +30,17 @@ describe("external agent identity normalization", () => {
       runtime_family: "hermes",
       runtime_target: "docker",
     });
+  });
+
+  it("derives the Nora management account from the authenticated principal", () => {
+    const identity = normalizeExternalAgentIdentity({ ...request, user_id: undefined }, principal);
+    expect(identity.user_id).toBe(USER_ID);
+  });
+
+  it("rejects a caller-supplied Nora management account that differs from the principal", () => {
+    expect(() =>
+      normalizeExternalAgentIdentity({ ...request, user_id: OTHER_USER_ID }, principal),
+    ).toThrow(/management user/i);
   });
 
   it("rejects a missing namespace", () => {
