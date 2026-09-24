@@ -46,6 +46,17 @@ async function main() {
   redis.on('error', error => {
     console.warn('headmaster-inference redis connection unavailable', { code: error?.code || 'redis_error' })
   })
+  // enableOfflineQueue:false makes commands issued before the connection is
+  // READY reject immediately ("Stream isn't writeable..."), so the boot probe
+  // must not race the initial connect. Wait for readiness (bounded) first.
+  if (redis.status !== 'ready') {
+    await new Promise((resolve, reject) => {
+      const onReady = () => { cleanup(); resolve() }
+      const cleanup = () => { clearTimeout(timer); redis.removeListener('ready', onReady) }
+      const timer = setTimeout(() => { cleanup(); reject(new Error('redis_connect_timeout')) }, 15_000)
+      redis.once('ready', onReady)
+    })
+  }
   await redis.ping()
   await db.query('SELECT 1')
 
