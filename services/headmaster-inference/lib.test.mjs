@@ -11,7 +11,7 @@ import {
   verifyAssertion,
 } from './assertion.mjs'
 import { createInferenceService } from './lib.mjs'
-import { createMemoryQuotaStore } from './quota.mjs'
+import { createMemoryQuotaStore, createRedisQuotaStore } from './quota.mjs'
 import { parseAccountProviderMap, providerCompletionUrl } from './policy.mjs'
 
 const SECRET = 's'.repeat(48)
@@ -81,6 +81,23 @@ async function postCompletion(origin, body, token, signal) {
     body,
     signal,
   })
+}
+
+// Real Redis coverage: skipped unless REDIS_URL points at a running server.
+async function openRedisQuota(t, options = {}) {
+  const url = process.env.REDIS_URL
+  if (!url) return null
+  const { default: Redis } = await import('ioredis')
+  const redis = new Redis(url, { maxRetriesPerRequest: 1 })
+  t.after(() => redis.quit())
+  const prefix = 'headmaster-inference-test'
+  const ownerId = randomUUID()
+  return {
+    redis,
+    ownerId,
+    key: suffix => `${prefix}:${ownerId}:${suffix}`,
+    quota: createRedisQuotaStore(redis, { prefix, ...options }),
+  }
 }
 
 test('assertions bind audience, owner, revision, method, exact path, body and short expiry', () => {
@@ -298,4 +315,154 @@ test('client abort cancels provider fetch and releases the account reservation',
   await Promise.race([cancelled, new Promise((_, reject) => setTimeout(() => reject(new Error('upstream cancellation timed out')), 1000))])
   assert.equal(upstreamSignal.aborted, true)
   assert.equal(f.quota.inspect(OWNER_A).active, 0)
+})
+
+test('duplicate settlement applies usage once and cannot double-spend the daily budget', async () => {
+  const day = Math.floor(NOW / 86_400_000)
+  const quota = createMemoryQuotaStore({ maxCompletionTokensPerDay: 100, now: () => NOW })
+  const settle = { ownerId: OWNER_A, requestId: 'settle-1', quotaDay: day, promptTokens: 4, completionTokens: 6, totalTokens: 10 }
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'settle-1', reserveOutputTokens: 6 }), { allowed: true, reason: 'ok', day })
+  assert.deepEqual(await quota.finish(settle), [6, 6])
+  assert.deepEqual(await quota.finish(settle), [0, 0])
+  assert.deepEqual(await quota.finish(settle), [0, 0])
+  assert.deepEqual(quota.inspect(OWNER_A), {
+    active: 0, reserved: 0, used: 6,
+    usage: { promptTokens: 4, completionTokens: 6, totalTokens: 10 },
+  })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'settle-2', reserveOutputTokens: 94 }), { allowed: true, reason: 'ok', day })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'settle-3', reserveOutputTokens: 1 }), { allowed: false, reason: 'token_budget' })
+})
+
+test('a settlement without provider usage charges exactly the conservative reservation', async () => {
+  const day = Math.floor(NOW / 86_400_000)
+  const quota = createMemoryQuotaStore({ maxCompletionTokensPerDay: 100, now: () => NOW })
+  const settle = { ownerId: OWNER_A, requestId: 'stream-1', quotaDay: day, promptTokens: 0, completionTokens: 40, totalTokens: 40 }
+  await quota.acquire({ ownerId: OWNER_A, requestId: 'stream-1', reserveOutputTokens: 40 })
+  assert.deepEqual(await quota.finish(settle), [40, 40])
+  assert.deepEqual(await quota.finish(settle), [0, 0])
+  assert.deepEqual(quota.inspect(OWNER_A), {
+    active: 0, reserved: 0, used: 40,
+    usage: { promptTokens: 0, completionTokens: 40, totalTokens: 40 },
+  })
+})
+
+test('concurrency survives a midnight boundary and a cross-midnight settlement releases the acquire-day reservation', async () => {
+  const boundary = 20_000 * 86_400_000
+  let clock = boundary - 60_000
+  const quota = createMemoryQuotaStore({ maxConcurrentPerAccount: 1, maxCompletionTokensPerDay: 100, now: () => clock })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'pre-midnight', reserveOutputTokens: 80 }), { allowed: true, reason: 'ok', day: 19_999 })
+  clock = boundary + 60_000
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'post-midnight', reserveOutputTokens: 5 }), { allowed: false, reason: 'concurrency' })
+  assert.deepEqual(await quota.finish({ ownerId: OWNER_A, requestId: 'pre-midnight', quotaDay: 19_999, promptTokens: 1, completionTokens: 4, totalTokens: 5 }), [80, 4])
+  assert.deepEqual(quota.inspect(OWNER_A), {
+    active: 0, reserved: 0, used: 0,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'post-midnight', reserveOutputTokens: 5 }), { allowed: true, reason: 'ok', day: 20_000 })
+  assert.deepEqual(quota.inspect(OWNER_A), {
+    active: 1, reserved: 5, used: 0,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  })
+})
+
+test('a crashed request is reclaimed after the active timeout without exhausting the budget', async () => {
+  const day = Math.floor(NOW / 86_400_000)
+  let clock = NOW
+  const quota = createMemoryQuotaStore({ maxConcurrentPerAccount: 2, maxCompletionTokensPerDay: 100, now: () => clock })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'crashed', reserveOutputTokens: 80 }), { allowed: true, reason: 'ok', day })
+  clock = NOW + 16 * 60_000
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'after-crash', reserveOutputTokens: 80 }), { allowed: true, reason: 'ok', day })
+  assert.deepEqual(quota.inspect(OWNER_A), {
+    active: 1, reserved: 80, used: 0,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'over-budget', reserveOutputTokens: 21 }), { allowed: false, reason: 'token_budget' })
+})
+
+test('a crashed request cannot let a new day exceed the daily token budget', async () => {
+  const boundary = 21_000 * 86_400_000
+  let clock = boundary - 30_000
+  const quota = createMemoryQuotaStore({ maxCompletionTokensPerDay: 100, now: () => clock })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'crashed', reserveOutputTokens: 100 }), { allowed: true, reason: 'ok', day: 20_999 })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'same-day-over', reserveOutputTokens: 1 }), { allowed: false, reason: 'token_budget' })
+  clock = boundary + 30_000
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'new-day', reserveOutputTokens: 100 }), { allowed: true, reason: 'ok', day: 21_000 })
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'new-day-over', reserveOutputTokens: 1 }), { allowed: false, reason: 'token_budget' })
+  assert.deepEqual(quota.inspect(OWNER_A), {
+    active: 2, reserved: 100, used: 0,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  })
+  clock = boundary + 900_000
+  assert.deepEqual(await quota.acquire({ ownerId: OWNER_A, requestId: 'reclaim', reserveOutputTokens: 1 }), { allowed: false, reason: 'token_budget' })
+  assert.deepEqual(quota.inspect(OWNER_A), {
+    active: 1, reserved: 100, used: 0,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  })
+})
+
+test('Redis quota store settles distinct prompt/completion/total values exactly once', async t => {
+  const f = await openRedisQuota(t, { maxCompletionTokensPerDay: 100, now: () => NOW })
+  if (!f) return t.skip('REDIS_URL is not set')
+  const { redis, ownerId, key, quota } = f
+  const day = Math.floor(NOW / 86_400_000)
+  const settle = { ownerId, requestId: 'redis-1', quotaDay: day, promptTokens: 11, completionTokens: 22, totalTokens: 33 }
+  assert.deepEqual(await quota.acquire({ ownerId, requestId: 'redis-1', reserveOutputTokens: 33 }), { allowed: true, reason: 'ok', day })
+  assert.deepEqual(await quota.finish(settle), [33, 22])
+  assert.deepEqual(await redis.hgetall(key(`usage:${day}`)), { prompt_tokens: '11', completion_tokens: '22', total_tokens: '33' })
+  assert.equal(await redis.get(key(`output:${day}`)), '22')
+  assert.equal(await redis.get(key(`reserved:${day}`)), '0')
+  assert.equal(await redis.zcard(key('active')), 0)
+  assert.deepEqual(await quota.finish(settle), [0, 0])
+  assert.deepEqual(await redis.hgetall(key(`usage:${day}`)), { prompt_tokens: '11', completion_tokens: '22', total_tokens: '33' })
+  assert.equal(await redis.get(key(`output:${day}`)), '22')
+  const remaining = await quota.acquire({ ownerId, requestId: 'redis-2', reserveOutputTokens: 78 })
+  assert.equal(remaining.allowed, true)
+  assert.equal(remaining.reason, 'ok')
+  const over = await quota.acquire({ ownerId, requestId: 'redis-3', reserveOutputTokens: 1 })
+  assert.equal(over.allowed, false)
+  assert.equal(over.reason, 'token_budget')
+})
+
+test('Redis quota store keeps concurrency across midnight, releases cross-midnight and reclaims crashed reservations', async t => {
+  const boundary = 22_000 * 86_400_000
+  let clock = boundary - 60_000
+  const f = await openRedisQuota(t, { maxConcurrentPerAccount: 1, maxCompletionTokensPerDay: 100, activeTimeoutMs: 5 * 60_000, now: () => clock })
+  if (!f) return t.skip('REDIS_URL is not set')
+  const { redis, ownerId, key, quota } = f
+
+  const pre = await quota.acquire({ ownerId, requestId: 'pre-midnight', reserveOutputTokens: 80 })
+  assert.equal(pre.allowed, true)
+  assert.equal(pre.day, 21_999)
+  assert.equal(await redis.zcard(key('active')), 1)
+
+  clock = boundary + 60_000
+  const blocked = await quota.acquire({ ownerId, requestId: 'post-midnight', reserveOutputTokens: 5 })
+  assert.equal(blocked.allowed, false)
+  assert.equal(blocked.reason, 'concurrency')
+
+  assert.deepEqual(await quota.finish({ ownerId, requestId: 'pre-midnight', quotaDay: 21_999, promptTokens: 1, completionTokens: 4, totalTokens: 5 }), [80, 4])
+  assert.equal(await redis.zcard(key('active')), 0)
+  assert.equal(await redis.get(key('reserved:21999')), '0')
+  assert.deepEqual(await redis.hgetall(key('usage:21999')), { prompt_tokens: '1', completion_tokens: '4', total_tokens: '5' })
+  assert.equal(await redis.get(key('output:22000')), null)
+
+  const post = await quota.acquire({ ownerId, requestId: 'post-midnight', reserveOutputTokens: 5 })
+  assert.equal(post.allowed, true)
+  assert.equal(post.day, 22_000)
+  assert.deepEqual(await quota.finish({ ownerId, requestId: 'post-midnight', quotaDay: 22_000, promptTokens: 0, completionTokens: 5, totalTokens: 5 }), [5, 5])
+  assert.equal(await redis.get(key('reserved:22000')), '0')
+
+  clock = boundary + 120_000
+  const crashed = await quota.acquire({ ownerId, requestId: 'crashed', reserveOutputTokens: 90 })
+  assert.equal(crashed.allowed, true)
+  clock = boundary + 120_000 + 330_000
+  const recovered = await quota.acquire({ ownerId, requestId: 'recovered', reserveOutputTokens: 90 })
+  assert.equal(recovered.allowed, true)
+  assert.equal(await redis.zcard(key('active')), 1)
+  assert.equal(await redis.get(key('reserved:22000')), '90')
+  assert.equal(await redis.hget(key('reservations:22000'), 'crashed'), null)
+  assert.equal(await redis.hget(key('reservations:22000'), 'recovered'), '90')
+  const blockedAgain = await quota.acquire({ ownerId, requestId: 'recovered-2', reserveOutputTokens: 1 })
+  assert.equal(blockedAgain.allowed, false)
+  assert.equal(blockedAgain.reason, 'concurrency')
 })
