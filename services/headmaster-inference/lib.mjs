@@ -1,6 +1,7 @@
 import http from 'node:http'
 import { createReplayCache, verifyAssertion } from './assertion.mjs'
 import {
+  TESTED_MODELS,
   allowedModelsForProvider,
   normalizeUsage,
   prepareChatCompletion,
@@ -155,6 +156,7 @@ function modelList(models, requestId) {
 export function createInferenceService({
   assertionSecret,
   accountProviderMap,
+  resolveAssignment,
   resolveProvider,
   quotaStore,
   fetchImpl = fetch,
@@ -168,9 +170,19 @@ export function createInferenceService({
   replayStore = null,
 } = {}) {
   if (typeof assertionSecret !== 'string' || Buffer.byteLength(assertionSecret) < 32) throw new Error('assertion_secret_invalid')
-  if (!(accountProviderMap instanceof Map) || typeof resolveProvider !== 'function' || !quotaStore) {
+  // Exactly one assignment source is accepted: the legacy env map (wrapped into
+  // an async lookup) or a durable async resolveAssignment(ownerId) resolver.
+  const hasAccountProviderMap = accountProviderMap !== undefined && accountProviderMap !== null
+  const hasResolveAssignment = resolveAssignment !== undefined && resolveAssignment !== null
+  if (hasAccountProviderMap === hasResolveAssignment) throw new Error('inference_service_dependencies_invalid')
+  if (hasAccountProviderMap && !(accountProviderMap instanceof Map)) throw new Error('inference_service_dependencies_invalid')
+  if (hasResolveAssignment && typeof resolveAssignment !== 'function') throw new Error('inference_service_dependencies_invalid')
+  if (typeof resolveProvider !== 'function' || !quotaStore) {
     throw new Error('inference_service_dependencies_invalid')
   }
+  const lookupAssignment = hasAccountProviderMap
+    ? async ownerId => accountProviderMap.get(ownerId) ?? null
+    : resolveAssignment
   const replay = replayStore || createReplayCache({ now })
 
   async function handle(req, res) {
@@ -209,20 +221,41 @@ export function createInferenceService({
       return safeError(res, 503, 'replay_store_unavailable', 'Managed inference is temporarily unavailable.', claims.request_id)
     }
     if (!replayClaimed) return safeError(res, 401, 'assertion_replayed', 'Private inference assertion was already used.', claims.request_id)
-    const mapping = accountProviderMap.get(claims.sub.toLowerCase())
-    if (!mapping) return safeError(res, 503, 'provider_mapping_unavailable', 'Managed inference is not configured for this account.', claims.request_id)
+    let mapping
+    try {
+      mapping = await lookupAssignment(claims.sub.toLowerCase())
+    } catch (error) {
+      logger.warn?.('headmaster-inference assignment lookup failed', {
+        requestId: claims.request_id,
+        code: error?.code || 'assignment_lookup_failed',
+      })
+      return safeError(res, 503, 'provider_mapping_unavailable', 'Managed inference is not configured for this account.', claims.request_id)
+    }
+    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)
+      || typeof mapping.noraUserId !== 'string' || typeof mapping.providerId !== 'string') {
+      return safeError(res, 503, 'provider_mapping_unavailable', 'Managed inference is not configured for this account.', claims.request_id)
+    }
 
     let provider
     try { provider = await resolveProvider(mapping.noraUserId, mapping.providerId) } catch (error) {
       logger.warn?.('headmaster-inference provider lookup failed', { requestId: claims.request_id, code: error?.code || 'provider_lookup_failed' })
       return safeError(res, 503, 'provider_unavailable', 'Managed inference is not available.', claims.request_id)
     }
-    if (!provider || provider.id !== mapping.providerId || provider.provider !== mapping.provider || !provider.apiKey) {
+    if (!provider || provider.id !== mapping.providerId || !provider.apiKey
+      || (mapping.provider !== undefined && provider.provider !== mapping.provider)) {
       return safeError(res, 503, 'provider_unavailable', 'Managed inference is not available.', claims.request_id)
     }
+    // Durable assignments carry no provider protocol and no per-account model
+    // list. The existing Nora provider row supplies the protocol; the tested
+    // provider/model catalogue still gates which models are exposed.
+    if (mapping.provider === undefined && !Object.hasOwn(TESTED_MODELS, String(provider.provider || ''))) {
+      logger.warn?.('headmaster-inference assignment provider protocol unsupported', { requestId: claims.request_id })
+      return safeError(res, 503, 'provider_mapping_unavailable', 'Managed inference is not configured for this account.', claims.request_id)
+    }
+    const effectiveMapping = mapping.provider === undefined ? { ...mapping, provider: provider.provider } : mapping
 
     if (req.method === 'GET') {
-      const models = allowedModelsForProvider(mapping, provider.models)
+      const models = allowedModelsForProvider(effectiveMapping, provider.models)
       if (models.length === 0) return safeError(res, 503, 'models_unavailable', 'No compatible models are enabled for this account.', claims.request_id)
       return sendJson(res, 200, modelList(models, claims.request_id), claims.request_id)
     }
@@ -231,7 +264,7 @@ export function createInferenceService({
     try { parsed = JSON.parse(body.toString('utf8')) } catch {
       return safeError(res, 400, 'body_invalid', 'Request body must be valid JSON.', claims.request_id)
     }
-    const prepared = prepareChatCompletion(parsed, mapping, provider.models, { maxCompletionTokens, defaultCompletionTokens })
+    const prepared = prepareChatCompletion(parsed, effectiveMapping, provider.models, { maxCompletionTokens, defaultCompletionTokens })
     if (prepared.error) {
       return safeError(res, 400, prepared.error, 'The request is not supported by the managed inference contract.', claims.request_id)
     }

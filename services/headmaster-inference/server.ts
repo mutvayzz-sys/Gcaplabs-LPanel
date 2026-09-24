@@ -12,7 +12,7 @@ const { resolveInferenceProvider } = require('../../backend-api/llmProviders.ts'
 const db = require('../../backend-api/db.ts')
 const { createRedisClient } = require('../../backend-api/lib/connectionConfig.ts')
 const IORedis = require('ioredis')
-const { parseAccountProviderMap } = require('./policy.mjs')
+const { resolveAssignmentConfiguration } = require('./assignments.mjs')
 const { createRedisReplayStore } = require('./assertion.mjs')
 const { createRedisQuotaStore } = require('./quota.mjs')
 const { createInferenceService } = require('./lib.mjs')
@@ -30,7 +30,14 @@ function requiredSecret() {
 }
 
 async function main() {
-  const accountProviderMap = parseAccountProviderMap(process.env.HEADMASTER_INFERENCE_ACCOUNT_MAP || '')
+  // Durable assignments come from Headmaster Supabase; the env map remains a
+  // LEGACY compatibility source and is only parsed when it is selected.
+  const assignments = resolveAssignmentConfiguration(process.env)
+  if (assignments.warning) console.warn(assignments.warning)
+  const assignmentLookup = assignments.mode === 'supabase'
+    ? { resolveAssignment: assignments.resolveAssignment }
+    : { accountProviderMap: assignments.accountProviderMap }
+
   const redis = createRedisClient(IORedis, process.env, {
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
@@ -49,7 +56,7 @@ async function main() {
   })
   const service = createInferenceService({
     assertionSecret: requiredSecret(),
-    accountProviderMap,
+    ...assignmentLookup,
     resolveProvider: (noraUserId, providerId) => resolveInferenceProvider(noraUserId, providerId, db),
     quotaStore,
     replayStore: createRedisReplayStore(redis),
@@ -66,7 +73,7 @@ async function main() {
   if (!host || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('listen_address_invalid')
 
   service.server.listen(port, host, () => {
-    console.log(`headmaster-inference listening on ${host}:${port}`)
+    console.log(`headmaster-inference listening on ${host}:${port}`, { assignmentSource: assignments.mode })
   })
   const shutdown = () => {
     service.server.close(() => {

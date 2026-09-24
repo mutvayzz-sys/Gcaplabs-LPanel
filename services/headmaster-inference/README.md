@@ -20,18 +20,25 @@ vault, or credential catalog.
 
 ## Trusted mapping and secrets
 
-`HEADMASTER_INFERENCE_ACCOUNT_MAP` is a server-only JSON object keyed by the
-Headmaster Supabase owner UUID. Each value is `{ "noraUserId": "<Nora UUID>",
-"providerId": "<existing llm_providers UUID>", "provider": "openai" }`, with an
-optional narrower `models` array. This bootstrap policy is never accepted from
-a request. Provider IDs and Nora user IDs are checked against existing owned
-rows by `resolveInferenceProvider`; only that row's encrypted key is decrypted.
-The relay does not scan users or enumerate provider keys.
+Assignments are resolved at request time from Headmaster's Supabase project;
+the relay holds no assignment copy and no provider secret.
+`public.headmaster_inference_assignments` (migration
+`20260924110000_headmaster_inference_assignments`) maps an owner
+(`auth.users.id`) to a Nora user UUID and an existing `llm_providers` row UUID,
+plus `enabled` and a monotonic `revision`. The table is reference-only: it
+stores identifiers, never secrets. Provider keys stay encrypted in Nora
+(`ENCRYPTION_KEY`) and are decrypted only by `resolveInferenceProvider` for the
+referenced row; the relay does not scan users or enumerate provider keys.
 
-The map is an interim trusted integration input until B2-A provides the
-account-to-provider policy as a server-side data contract. Populate it from the
-Headmaster account authority; never copy IDs from client fields. Accounts
-without a mapping fail closed with `provider_mapping_unavailable`.
+`HEADMASTER_INFERENCE_ASSIGNMENT_SOURCE` selects the assignment source:
+
+- `auto` (default): Supabase when both `HEADMASTER_INFERENCE_SUPABASE_URL` and
+  `HEADMASTER_INFERENCE_SUPABASE_SERVICE_ROLE_KEY` are set, otherwise the
+  legacy env map.
+- `supabase`: durable Supabase assignments only; required before removing the
+  env map.
+- `env`: the LEGACY `HEADMASTER_INFERENCE_ACCOUNT_MAP` compatibility mode; an
+  explicit selection logs a LEGACY-mode warning at startup.
 
 Required private settings:
 
@@ -41,7 +48,72 @@ Required private settings:
   dedicated read-only DB principal, not the backend operator's write role.
 - Existing Redis connection settings; use a dedicated ACL/user restricted to
   this service's key prefix.
-- `HEADMASTER_INFERENCE_ACCOUNT_MAP` as above.
+- `HEADMASTER_INFERENCE_SUPABASE_URL`: the Headmaster project origin
+  (`https://<ref>.supabase.co`; no credentials, path, or query).
+- `HEADMASTER_INFERENCE_SUPABASE_SERVICE_ROLE_KEY`: server-only credential used
+  for the single-row assignment read (and, by the migration script only, the
+  admin RPC). Never ship it to clients.
+- `HEADMASTER_INFERENCE_ASSIGNMENT_TTL_MS`: optional assignment cache lifetime
+  in milliseconds, default 30000, clamped to 1000..300000.
+
+TTL and revocation semantics:
+
+- The relay caches the last successful assignment read per owner for at most
+  the TTL (default 30 seconds), so replacement, revocation
+  (`enabled = false`), and reapproval take effect within that bounded window.
+  An entry is never served beyond its TTL and a failed lookup is never cached.
+- A revoked assignment is logged distinctly server-side
+  (`headmaster-inference assignment revoked`) so an operator can tell a
+  disabled owner apart from one who never had an assignment.
+- Absence of a row denies access (`provider_mapping_unavailable`); assignment
+  rows are never auto-created per auth user. Any lookup failure (network,
+  non-2xx, malformed or duplicate rows, timeout) also denies — no stale or
+  negative fallback is served.
+- The Supabase tables are read-only to `service_role`; every mutation goes
+  through the admin-gated, revision-fenced
+  `headmaster_admin_set_inference_assignment` RPC, which appends an audit row to
+  `headmaster_inference_assignment_events` and returns `created` / `changed` /
+  `unchanged` / `revision_conflict` / `actor_not_admin` / `owner_not_found`.
+
+Least access: use a dedicated Supabase credential for the relay where the
+project supports one, keep it in the relay's secret store rather than in image
+config, and treat it as read-only in operational practice — the relay itself
+only ever issues one bounded `SELECT` (at most two rows, to detect an ambiguous
+row) and never writes. Rotate the credential if the relay host is compromised.
+
+Legacy env map: `HEADMASTER_INFERENCE_ACCOUNT_MAP` is a server-only JSON object
+keyed by the Headmaster Supabase owner UUID. Each value is `{ "noraUserId":
+"<Nora UUID>", "providerId": "<existing llm_providers UUID>", "provider":
+"openai" }`, with an optional narrower `models` array. This bootstrap policy is
+never accepted from a request and is only consulted when the assignment source
+is `env`. Accounts without a mapping fail closed with
+`provider_mapping_unavailable`.
+
+### Migrating from the env map
+
+1. Apply `20260924110000_headmaster_inference_assignments` in Headmaster
+   Supabase.
+2. While the running relay still reads `HEADMASTER_INFERENCE_ACCOUNT_MAP`, run
+   `node services/headmaster-inference/scripts/migrate-account-map.mjs --actor
+   <admin-auth-users-uuid>` with `HEADMASTER_INFERENCE_SUPABASE_URL` and
+   `HEADMASTER_INFERENCE_SUPABASE_SERVICE_ROLE_KEY` set (or pass `--map-file`).
+   The script validates the map, writes revision-fenced rows with
+   `change_source='env_map_migration'`, and is idempotent: already-migrated
+   accounts report `unchanged` without a revision bump. `--dry-run` prints the
+   planned writes.
+3. Deploy the relay with `HEADMASTER_INFERENCE_ASSIGNMENT_SOURCE=supabase` (or
+   `auto`) and verify that a migrated account succeeds while an account without
+   a row is denied with `provider_mapping_unavailable`.
+4. Remove `HEADMASTER_INFERENCE_ACCOUNT_MAP` from the relay environment.
+
+### Rollback
+
+- Redeploy the previous relay image, or set
+  `HEADMASTER_INFERENCE_ASSIGNMENT_SOURCE=env` and restore
+  `HEADMASTER_INFERENCE_ACCOUNT_MAP`. Migrated rows stay inert until a Supabase
+  source is used again; no rollback migration is required.
+- To cut an account off immediately, disable or replace its assignment through
+  the admin RPC (audited); the relay honors it within the bounded TTL window.
 
 The assertion is `base64url(JSON claims).base64url(HMAC-SHA256(encoded claims))`.
 Claims are version 1 with `aud=headmaster-inference`, `sub=<Headmaster owner
@@ -97,5 +169,5 @@ The current draft table has only `owner_id`, `entitlement`, and `updated_at`;
 its read-only entitlement route and `authorization_revision` migration are still
 required. The fixed public admission origin also must be provisioned and returned
 by account capabilities/status. Do not deploy this service until those contracts,
-the provider mapping, secret distribution, Redis/DB ACLs, and TLS/private routing
-are in place.
+the assignment migration above is applied, secret distribution, Redis/DB ACLs,
+and TLS/private routing are in place.

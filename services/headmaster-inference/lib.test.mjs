@@ -466,3 +466,75 @@ test('Redis quota store keeps concurrency across midnight, releases cross-midnig
   assert.equal(blockedAgain.allowed, false)
   assert.equal(blockedAgain.reason, 'concurrency')
 })
+
+test('durable resolveAssignment form serves mappings without provider or per-account models fields', async t => {
+  const seen = []
+  const upstreamCalls = []
+  const f = await startService(t, {
+    accountProviderMap: undefined,
+    resolveAssignment: async ownerId => {
+      seen.push(ownerId)
+      return { noraUserId: NORA_USER_A, providerId: PROVIDER_A }
+    },
+    fetchImpl: async (url, options) => {
+      upstreamCalls.push({ url: String(url), body: JSON.parse(options.body) })
+      return new Response('{"id":"c1","choices":[]}', { status: 200, headers: { 'content-type': 'application/json' } })
+    },
+  })
+
+  const modelsResponse = await getModels(f.origin, makeToken({ method: 'GET', path: '/v1/models' }))
+  assert.equal(modelsResponse.status, 200)
+  const models = await modelsResponse.json()
+  assert.deepEqual(models.data.map(row => row.id), ['gpt-5.5', 'gpt-5.5-pro'])
+  assert.equal(JSON.stringify(models).includes(PROVIDER_A), false)
+  assert.deepEqual(seen, [OWNER_A.toLowerCase()])
+
+  const body = Buffer.from(JSON.stringify({ model: 'gpt-5.5-pro', messages: [{ role: 'user', content: 'hello' }] }))
+  const token = makeToken({ method: 'POST', path: '/v1/chat/completions', body })
+  const response = await postCompletion(f.origin, body, token)
+  assert.equal(response.status, 200)
+  assert.equal(upstreamCalls.length, 1)
+  assert.equal(upstreamCalls[0].url, 'https://api.openai.com/v1/chat/completions')
+  assert.equal(upstreamCalls[0].body.max_completion_tokens, 1024)
+})
+
+test('resolveAssignment failures and missing mappings fail closed as provider_mapping_unavailable', async t => {
+  const fetchCalls = []
+  const fetchImpl = async () => { fetchCalls.push(1); return new Response('{}') }
+
+  const failing = await startService(t, {
+    accountProviderMap: undefined,
+    resolveAssignment: async () => { throw Object.assign(new Error('supabase unavailable'), { code: 'assignment_lookup_failed' }) },
+    fetchImpl,
+  })
+  const failure = await getModels(failing.origin, makeToken({ method: 'GET', path: '/v1/models' }))
+  assert.equal(failure.status, 503)
+  assert.equal((await failure.json()).error.code, 'provider_mapping_unavailable')
+
+  const missing = await startService(t, {
+    accountProviderMap: undefined,
+    resolveAssignment: async () => null,
+    fetchImpl,
+  })
+  const absent = await getModels(missing.origin, makeToken({ method: 'GET', path: '/v1/models' }))
+  assert.equal(absent.status, 503)
+  assert.equal((await absent.json()).error.code, 'provider_mapping_unavailable')
+  assert.deepEqual(fetchCalls, [])
+})
+
+test('the inference service accepts exactly one assignment source', () => {
+  const base = {
+    assertionSecret: SECRET,
+    resolveProvider: async () => provider(),
+    quotaStore: createMemoryQuotaStore({ now: () => NOW }),
+  }
+  assert.throws(() => createInferenceService(base), /inference_service_dependencies_invalid/)
+  assert.throws(() => createInferenceService({
+    ...base,
+    accountProviderMap: policyMap(),
+    resolveAssignment: async () => null,
+  }), /inference_service_dependencies_invalid/)
+  assert.throws(() => createInferenceService({ ...base, accountProviderMap: 'not-a-map' }), /inference_service_dependencies_invalid/)
+  assert.throws(() => createInferenceService({ ...base, resolveAssignment: 'not-a-function' }), /inference_service_dependencies_invalid/)
+  assert.throws(() => createInferenceService({ ...base, accountProviderMap: null, resolveAssignment: null }), /inference_service_dependencies_invalid/)
+})
