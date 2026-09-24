@@ -2446,6 +2446,23 @@ async function migrateDB(database = db, env = process.env) {
     `ALTER TABLE platform_settings ALTER COLUMN agent_hub_url SET DEFAULT 'https://norafleet.ai'`,
     `UPDATE platform_settings SET agent_hub_url = 'https://norafleet.ai', updated_at = NOW()
        WHERE agent_hub_url = 'https://nora.solomontsao.com'`,
+    // N1: immutable external namespace/ID (e.g. namespace 'headmaster' + a
+    // Headmaster workspace UUID) plus create-request idempotency, so a
+    // repeated/concurrent create for the same external identity or the same
+    // idempotency key never produces a duplicate agent. external_owner_id is
+    // separate, trusted integration metadata (who owns this external_id) so a
+    // plain rename (PATCH name only) can never move an agent between owners.
+    `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_id_namespace TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_owner_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE agents ADD COLUMN create_request_key TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE agents ADD COLUMN create_request_fingerprint TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS agents_external_identity_unique_idx
+       ON agents(user_id, external_id_namespace, external_id)
+       WHERE external_id_namespace IS NOT NULL AND external_id IS NOT NULL AND status <> 'deleted'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS agents_create_request_key_unique_idx
+       ON agents(user_id, create_request_key)
+       WHERE create_request_key IS NOT NULL`,
   ];
 
   return runVersionedMigrations(database, migrations, {

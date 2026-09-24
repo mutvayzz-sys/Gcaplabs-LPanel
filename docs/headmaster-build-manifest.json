@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "n0-source-prepared-not-built",
+  "status": "n0-lifecycle-accepted",
   "observed_at": "2026-09-23",
   "source": {
     "upstream_repository": "https://github.com/solomon2773/nora.git",
@@ -8,7 +8,10 @@
     "owner_fork_repository": "https://github.com/mutvayzz-sys/nora-base.git",
     "owner_fork_master_observed_commit": "4b49eba6080af79ea810faa7609c7bfe67381fcc",
     "upstream_master_observed_commit": "358b1beeaf683f76d488b113adbdfc59c52d6779",
-    "headmaster_commit": null,
+    "headmaster_commit": "a8916f36214eed6de61a91e0d55d0906a5c8fb18",
+    "headmaster_commit_subject": "N0: adopt Headmaster Nora patch",
+    "headmaster_commit_parent": "40322503991fb9216d91e888a3834ea33b85d4a4",
+    "commit_pushed_to_origin": true,
     "working_tree_changes": [
       "workers/provisioner/backends/docker.ts",
       "workers/provisioner/backends/hermes.ts",
@@ -20,19 +23,21 @@
       "backend-api/__tests__/provisioning.test.ts",
       "backend-api/__tests__/provisionerProviderSelection.test.ts"
     ],
-    "api_and_worker_same_commit": null
+    "api_and_worker_same_commit": true
   },
   "runtime": {
-    "image": "nousresearch/hermes-agent:v2026.9.21",
-    "version": "0.21.4",
-    "digest": "sha256:6bece0644e29a347e5ae17db43c36938c86f171c6f5e0cef18aa2075d331f3a3"
+    "image": "nousresearch/hermes-agent:latest",
+    "note": "Lifecycle acceptance test used the ':latest' tag (deploy request did not pin an image). The compatibility-notes/pin target 'nousresearch/hermes-agent:v2026.9.21' was not re-verified in this pass; the exercised provisioner code paths (docker.ts/hermes.ts/healthChecks.ts/worker.ts) do not branch on Hermes image tag, so this does not weaken the lifecycle proof, but the pinned tag should still be smoke-tested before production adoption.",
+    "version_pinned_reference": "v2026.9.21",
+    "digest_pinned_reference": "sha256:6bece0644e29a347e5ae17db43c36938c86f171c6f5e0cef18aa2075d331f3a3"
   },
   "migrations": {
     "nora_migrations_added": [],
     "production_nora_migration_state": "not changed by N0; current state not independently recorded here",
     "disposable_fixture": {
       "base_commit": "40322503991fb9216d91e888a3834ea33b85d4a4",
-      "upstream_migrations_applied": 244
+      "upstream_migrations_applied": 244,
+      "candidate_swap_migration_check": "DB migrations verified (244 total, 0 newly applied) on candidate-image boot -- confirms the N0 patch requires no schema changes"
     },
     "headmaster_supabase_migrations": {
       "applied_through": "20260923021624",
@@ -56,19 +61,41 @@
       }
     },
     "candidate": {
-      "api_image": null,
-      "api_digest": null,
-      "worker_image": null,
-      "worker_digest": null,
-      "source_revision_label": null,
-      "build_from_same_headmaster_commit": null
+      "built_in": "disposable DIND fixture hm2-p0-nora-dind-20260923 (never pushed to a registry -- image IDs below are local content-addressable IDs, not registry digests)",
+      "api_image": "hm2-n0-candidate-api:a8916f36214eed6de61a91e0d55d0906a5c8fb18",
+      "api_image_id": "sha256:7fa01c7e0477a7dd32b1b72e5a14d09f740fd575d93c8100e8feefec291b0af9",
+      "worker_image": "hm2-n0-candidate-worker:a8916f36214eed6de61a91e0d55d0906a5c8fb18",
+      "worker_image_id": "sha256:f0325f44f03905167cdf928bda44c6f26080fcc900eb06eeae1fc43b372862c2",
+      "source_revision_label": "a8916f36214eed6de61a91e0d55d0906a5c8fb18",
+      "source_revision_label_verified_both_images": true,
+      "build_from_same_headmaster_commit": true,
+      "built_via": "backend-api/Dockerfile.prod and workers/provisioner/Dockerfile.prod"
     }
+  },
+  "lifecycle_acceptance_test_2026_09_23": {
+    "method": "Swapped hm2-p0-nora-backend-api-1 and hm2-p0-nora-worker-provisioner-1 (inside the disposable P0 DIND fixture) onto the candidate images via a docker-compose.n0-swap.yml overlay that (a) selects the candidate image tags, (b) drops the dev-mode source bind mounts docker-compose.p0.yml/docker-compose.yml normally apply so the container actually runs the image's own baked-in /app rather than the host source tree, and (c) overrides command to [\"npm\",\"start\"] instead of the dev 'npm install && npm start' -- the prod image runs Dockerfile.prod's build output as non-root-capable but compose still forces user 0:0, so no permission issues. Both services came up healthy on the candidate images with 'DB migrations verified (244 total, 0 newly applied)'.",
+    "prerequisite_fix": "A plain POST /agents/deploy with no llm_provider_id failed with worker error code PROVIDER_STATE_REMOVED_DURING_DEPLOYMENT ('LLM provider state was removed while the runtime was provisioning') after 5 retries -> DLQ. Root cause: reconcileRuntimeLlmAuth (workers/provisioner/worker.ts) requires either LLM env vars or a defaultProvider once the container starts; a fresh user has neither unless a provider row exists. The built-in demo flow (POST /agents/activate-demo) creates one via llmProviders.ensureDemoProvider(userId), but that route hardcodes runtime_family='openclaw' and is also disabled in this fixture's platform config (capabilities.localDockerDemo.enabled=false), so it could not be used directly for a 'hermes' family agent. Fix: called llmProviders.ensureDemoProvider(userId) directly in-process (via `npx tsx` one-liner inside the running backend-api container, same DB pool/env), which is runtime-family-agnostic and just inserts/updates a normal 'demo' provider row (is_default=true for a provider-less user). This is worth carrying into N4 (provider-lock/lifecycle reliability) as a known gap: the generic deploy path has no equivalent safety net to the activate-demo advisory-lock + ensureDemoProvider pattern.",
+    "test_subjects": {
+      "agent_a": { "name": "n0-lifecycle-a2", "id": "a303e814-a37d-4b5a-bb39-7266d68da2d0", "container": "nora-hermes-n0-lifecycle-a2-mue3tqz5" },
+      "agent_b_neighbor": { "name": "n0-lifecycle-b2-neighbor", "id": "e5921396-6a9f-4815-a20a-d2925e10d618", "container": "nora-hermes-n0-lifecycle-b2-neighbor-mue3v4j3", "container_id_full": "d3384823cc6eefdbb67dee1edf887c300da89c836baf771b5def5f789afa69e7" }
+    },
+    "steps_and_evidence": [
+      "Deploy A (runtime_family=hermes, backend_type=docker): queued -> deploying -> running in 64s.",
+      "Deploy B (same user, sequential after A reached running): queued -> deploying -> running in 64s. Distinct nora_hermes_home_<id> volume per agent.",
+      "Planted a unique marker file on A's persistent volume (/opt/data/n0-marker.txt) and a distinct marker on B's (/opt/data/b-marker.txt).",
+      "POST /agents/A/stop: API returned status=stopped; docker ps -a showed A Exited(0); B status/container_id/marker all unchanged (verified via API + docker inspect + docker exec cat).",
+      "POST /agents/A/start: A reached status=running in 8s (no re-pull/re-bootstrap needed); A's marker file was still present (same volume reused, data survived restart); B's container_id and marker were unchanged throughout.",
+      "DELETE /agents/A: API returned success; A's container fully removed from docker ps -a; GET /agents/A returned HTTP 404; A's nora_hermes_home volume was also removed (full teardown on explicit delete, unlike the 'keep volumes on retry/replacement' behavior seen during the earlier failed-deploy retries); B's status, exact container_id, and marker file were all unchanged.",
+      "Cleanup: deleted agent B via the same API. Outer host resource check post-test: Mem 3.1Gi/7.7Gi used (4.6Gi available), Swap 2.5Gi/4Gi, disk 61G/123G (50%) -- stable, no leak observed from this test."
+    ],
+    "result": "PASS -- provision, use, stop, restart (with data persistence proof), and remove all exercised on the candidate images; neighbor isolation (container identity, running status, and on-disk marker) held through every step."
   },
   "release_state": {
     "production_changed": false,
     "migration_applied": false,
-    "commit_created": false,
-    "push_created": false,
-    "disposable_hermes_lifecycle_acceptance": "pending"
+    "commit_created": true,
+    "commit_sha": "a8916f36214eed6de61a91e0d55d0906a5c8fb18",
+    "push_created": true,
+    "disposable_hermes_lifecycle_acceptance": "passed_2026_09_23"
   }
 }
