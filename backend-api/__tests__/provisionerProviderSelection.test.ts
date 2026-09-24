@@ -159,6 +159,17 @@ const { reconcileProviderStateUntilStable } = require("../../workers/provisioner
 beforeEach(() => {
   jest.clearAllMocks();
   mockWorkerDb.query.mockReset();
+  // finalizeProvisionedDeployment (deploymentLifecycle.ts) calls db.connect()
+  // to run its finalize transaction as a single client, then client.query(...)
+  // and client.release(). An unconfigured jest.fn() for `connect` resolves to
+  // undefined, so any test that reaches a successful finalize() crashed with
+  // "Cannot read properties of undefined (reading 'query')" instead of
+  // exercising the real finalize path — proxy the client's query through the
+  // same mockWorkerDb.query mock every other test already configures.
+  mockWorkerDb.connect.mockReset().mockResolvedValue({
+    query: (...args) => mockWorkerDb.query(...args),
+    release: jest.fn(),
+  });
   mockLockClient.connect.mockReset().mockResolvedValue(undefined);
   mockLockClient.query.mockReset().mockResolvedValue({ rows: [] });
   mockLockClient.end.mockReset().mockResolvedValue(undefined);
@@ -1656,6 +1667,18 @@ describe("provisioner deployment lifecycle", () => {
       if (normalizedSql.includes("FROM integrations")) return { rows: [] };
       if (normalizedSql === "SELECT status FROM agents WHERE id = $1") {
         return { rows: [{ status: "deploying" }] };
+      }
+      if (normalizedSql.includes("external_id_namespace, external_owner_id")) {
+        // persistProvisionedRuntimeMetadata's pre-update SELECT ... FOR UPDATE.
+        // Not a Headmaster-namespaced agent, so the runtime-credential staging
+        // branch is skipped and this test stays focused on provider drift.
+        return { rows: [{ id: "agent-1", container_id: null, external_id_namespace: null, external_owner_id: null }] };
+      }
+      if (normalizedSql.includes("RETURNING id, external_id_namespace")) {
+        return { rows: [{ id: "agent-1", external_id_namespace: null }] };
+      }
+      if (normalizedSql.includes("RETURNING agent_id")) {
+        return { rows: [{ agent_id: "agent-1" }] };
       }
       if (normalizedSql.includes("RETURNING id, container_id")) {
         return {
