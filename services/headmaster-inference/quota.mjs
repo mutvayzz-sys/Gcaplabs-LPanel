@@ -1,0 +1,213 @@
+// Managed-inference quota store.
+//
+// Contract (identical for the Redis and in-memory stores):
+//   acquire({ ownerId, requestId, reserveOutputTokens })
+//     -> { allowed, reason, day }. `day` is the calendar day the reservation is
+//     attributed to and must be passed back to finish as `quotaDay`.
+//   finish({ ownerId, requestId, quotaDay, promptTokens, completionTokens, totalTokens })
+//     -> releases the reservation and charges usage at most once per request /
+//     reservation id, against the day recorded at acquire. Both stores return
+//     [releasedTokens, chargedOutputTokens]; a duplicate settlement returns [0, 0].
+//
+// The active-request set is deliberately day-independent: a midnight boundary must
+// not reset concurrent-request accounting (which would double the available
+// concurrency). Reservations, charged output and detailed usage stay day-scoped.
+// Crashed requests are reconciled on the next acquire once they are older than
+// activeTimeoutMs: the stale active entry is dropped and a still-live reservation is
+// released, so a dead request neither blocks concurrency forever nor permanently
+// exhausts the daily token budget.
+
+const ACQUIRE_SCRIPT = `
+local requestCount = tonumber(redis.call('GET', KEYS[1]) or '0')
+if requestCount >= tonumber(ARGV[4]) then return {0, 'request_budget'} end
+local expired = redis.call('ZRANGEBYSCORE', KEYS[2], '-inf', tonumber(ARGV[2]))
+for _, requestId in ipairs(expired) do
+  local staleReservation = tonumber(redis.call('HGET', KEYS[5], requestId) or '0')
+  if staleReservation > 0 then
+    redis.call('HDEL', KEYS[5], requestId)
+    local reservedTotal = tonumber(redis.call('GET', KEYS[3]) or '0')
+    if reservedTotal >= staleReservation then
+      redis.call('DECRBY', KEYS[3], staleReservation)
+    else
+      redis.call('SET', KEYS[3], '0')
+      redis.call('EXPIRE', KEYS[3], tonumber(ARGV[9]))
+    end
+  end
+  redis.call('ZREM', KEYS[2], requestId)
+end
+if redis.call('ZCARD', KEYS[2]) >= tonumber(ARGV[3]) then return {0, 'concurrency'} end
+local used = tonumber(redis.call('GET', KEYS[4]) or '0')
+local reserved = tonumber(redis.call('GET', KEYS[3]) or '0')
+local reserve = tonumber(ARGV[5])
+if used + reserved + reserve > tonumber(ARGV[6]) then return {0, 'token_budget'} end
+redis.call('INCR', KEYS[1])
+if requestCount == 0 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[8])) end
+redis.call('ZADD', KEYS[2], tonumber(ARGV[1]), ARGV[7])
+redis.call('EXPIRE', KEYS[2], tonumber(ARGV[9]))
+redis.call('HSET', KEYS[5], ARGV[7], reserve)
+redis.call('INCRBY', KEYS[3], reserve)
+redis.call('EXPIRE', KEYS[3], tonumber(ARGV[9]))
+redis.call('EXPIRE', KEYS[5], tonumber(ARGV[9]))
+redis.call('HDEL', KEYS[6], ARGV[7])
+return {1, 'ok'}
+`
+
+// ARGV: 1=requestId, 2=output tokens, 3=prompt tokens, 4=total tokens,
+//       5=usage ttl seconds, 6=active ttl seconds.
+// The settled marker (KEYS[6]) makes settlement idempotent per request id: the whole
+// script is atomic, so a duplicate finish is a no-op and cannot charge usage twice.
+const FINISH_SCRIPT = `
+if redis.call('HSETNX', KEYS[6], ARGV[1], 1) == 0 then return {0, 0} end
+local reserved = tonumber(redis.call('HGET', KEYS[2], ARGV[1]) or '0')
+if reserved > 0 then
+  redis.call('HDEL', KEYS[2], ARGV[1])
+  local reservedTotal = tonumber(redis.call('GET', KEYS[3]) or '0')
+  if reservedTotal >= reserved then
+    redis.call('DECRBY', KEYS[3], reserved)
+  else
+    redis.call('SET', KEYS[3], '0')
+    redis.call('EXPIRE', KEYS[3], tonumber(ARGV[6]))
+  end
+end
+redis.call('ZREM', KEYS[1], ARGV[1])
+local output = tonumber(ARGV[2])
+local prompt = tonumber(ARGV[3])
+local total = tonumber(ARGV[4])
+if output > 0 then redis.call('INCRBY', KEYS[4], output) end
+if prompt > 0 then redis.call('HINCRBY', KEYS[5], 'prompt_tokens', prompt) end
+if output > 0 then redis.call('HINCRBY', KEYS[5], 'completion_tokens', output) end
+if total > 0 then redis.call('HINCRBY', KEYS[5], 'total_tokens', total) end
+redis.call('EXPIRE', KEYS[4], tonumber(ARGV[5]))
+redis.call('EXPIRE', KEYS[5], tonumber(ARGV[5]))
+redis.call('EXPIRE', KEYS[6], tonumber(ARGV[5]))
+return {reserved, output}
+`
+
+export function createRedisQuotaStore(redis, {
+  prefix = 'headmaster-inference',
+  maxConcurrentPerAccount = 3,
+  maxRequestsPerHour = 120,
+  maxCompletionTokensPerDay = 120_000,
+  activeTimeoutMs = 15 * 60_000,
+  usageTtlSeconds = 90 * 24 * 60 * 60,
+  now = () => Date.now(),
+} = {}) {
+  const key = (ownerId, suffix) => `${prefix}:${ownerId}:${suffix}`
+  const activeTtlSeconds = Math.ceil(activeTimeoutMs / 1000) + 60
+  return {
+    async acquire({ ownerId, requestId, reserveOutputTokens }) {
+      const at = now()
+      const hour = Math.floor(at / 3_600_000)
+      const day = Math.floor(at / 86_400_000)
+      const result = await redis.eval(ACQUIRE_SCRIPT, 6,
+        key(ownerId, `requests:${hour}`), key(ownerId, 'active'),
+        key(ownerId, `reserved:${day}`), key(ownerId, `output:${day}`),
+        key(ownerId, `reservations:${day}`), key(ownerId, `settled:${day}`),
+        at, at - activeTimeoutMs, maxConcurrentPerAccount, maxRequestsPerHour,
+        reserveOutputTokens, maxCompletionTokensPerDay, requestId,
+        3_700, activeTtlSeconds)
+      return { allowed: Number(result?.[0]) === 1, reason: String(result?.[1] || 'quota_unavailable'), day }
+    },
+    async finish({ ownerId, requestId, quotaDay, promptTokens = 0, completionTokens = 0, totalTokens = 0 }) {
+      const day = Number.isSafeInteger(quotaDay) ? quotaDay : Math.floor(now() / 86_400_000)
+      return redis.eval(FINISH_SCRIPT, 6,
+        key(ownerId, 'active'), key(ownerId, `reservations:${day}`),
+        key(ownerId, `reserved:${day}`), key(ownerId, `output:${day}`),
+        key(ownerId, `usage:${day}`), key(ownerId, `settled:${day}`),
+        requestId, completionTokens, promptTokens, totalTokens,
+        usageTtlSeconds, activeTtlSeconds)
+    },
+  }
+}
+
+export function createMemoryQuotaStore({
+  maxConcurrentPerAccount = 3,
+  maxRequestsPerHour = 120,
+  maxCompletionTokensPerDay = 120_000,
+  activeTimeoutMs = 15 * 60_000,
+  now = () => Date.now(),
+} = {}) {
+  const accounts = new Map()
+  const dayOf = at => Math.floor(at / 86_400_000)
+  const get = ownerId => {
+    if (!accounts.has(ownerId)) accounts.set(ownerId, {
+      active: new Map(),          // requestId -> { at, day }
+      reservations: new Map(),    // requestId -> { reserve, day }
+      settled: new Map(),         // requestId -> day of the settled reservation
+      requests: [],               // hourly request buckets
+      reservedByDay: new Map(),   // day -> outstanding reserved output tokens
+      usedByDay: new Map(),       // day -> charged output tokens
+      usageByDay: new Map(),      // day -> { promptTokens, completionTokens, totalTokens }
+    })
+    return accounts.get(ownerId)
+  }
+  const release = (account, requestId) => {
+    const reservation = account.reservations.get(requestId)
+    if (!reservation) return 0
+    account.reservations.delete(requestId)
+    const outstanding = account.reservedByDay.get(reservation.day) || 0
+    account.reservedByDay.set(reservation.day, Math.max(0, outstanding - reservation.reserve))
+    return reservation.reserve
+  }
+  // Mirrors the short-lived day keys of the Redis store: keep yesterday for
+  // reservations that settle just after a midnight boundary, drop older days.
+  const prune = (account, day) => {
+    for (const days of [account.reservedByDay, account.usedByDay, account.usageByDay]) {
+      for (const recorded of days.keys()) if (recorded < day - 1) days.delete(recorded)
+    }
+    for (const [requestId, settledDay] of account.settled) if (settledDay < day - 1) account.settled.delete(requestId)
+  }
+  const usageFor = (account, day) => account.usageByDay.get(day) || { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+  return {
+    async acquire({ ownerId, requestId, reserveOutputTokens }) {
+      const at = now()
+      const hour = Math.floor(at / 3_600_000)
+      const day = dayOf(at)
+      const account = get(ownerId)
+      prune(account, day)
+      account.requests = account.requests.filter(bucket => bucket.hour === hour)
+      if (account.requests.length >= maxRequestsPerHour) return { allowed: false, reason: 'request_budget' }
+      for (const [id, entry] of account.active) {
+        if (entry.at <= at - activeTimeoutMs) {
+          release(account, id)
+          account.active.delete(id)
+        }
+      }
+      if (account.active.size >= maxConcurrentPerAccount) return { allowed: false, reason: 'concurrency' }
+      const used = account.usedByDay.get(day) || 0
+      const reserved = account.reservedByDay.get(day) || 0
+      if (used + reserved + reserveOutputTokens > maxCompletionTokensPerDay) return { allowed: false, reason: 'token_budget' }
+      account.requests.push({ hour })
+      account.active.set(requestId, { at, day })
+      account.settled.delete(requestId)
+      account.reservations.set(requestId, { reserve: reserveOutputTokens, day })
+      account.reservedByDay.set(day, reserved + reserveOutputTokens)
+      return { allowed: true, reason: 'ok', day }
+    },
+    async finish({ ownerId, requestId, quotaDay, promptTokens = 0, completionTokens = 0, totalTokens = 0 }) {
+      const day = Number.isSafeInteger(quotaDay) ? quotaDay : dayOf(now())
+      const account = get(ownerId)
+      if (account.settled.get(requestId) === day) return [0, 0]
+      account.settled.set(requestId, day)
+      const released = release(account, requestId)
+      account.active.delete(requestId)
+      account.usedByDay.set(day, (account.usedByDay.get(day) || 0) + completionTokens)
+      const usage = usageFor(account, day)
+      usage.promptTokens += promptTokens
+      usage.completionTokens += completionTokens
+      usage.totalTokens += totalTokens
+      account.usageByDay.set(day, usage)
+      return [released, completionTokens]
+    },
+    inspect(ownerId) {
+      const account = get(ownerId)
+      const day = dayOf(now())
+      return {
+        active: account.active.size,
+        reserved: account.reservedByDay.get(day) || 0,
+        used: account.usedByDay.get(day) || 0,
+        usage: { ...usageFor(account, day) },
+      }
+    },
+  }
+}
