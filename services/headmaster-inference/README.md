@@ -69,6 +69,12 @@ TTL and revocation semantics:
   rows are never auto-created per auth user. Any lookup failure (network,
   non-2xx, malformed or duplicate rows, timeout) also denies — no stale or
   negative fallback is served.
+- The lookup deadline (`HEADMASTER_INFERENCE_ASSIGNMENT_TIMEOUT_MS`, default
+  10s) stays active through response body consumption, not just until headers
+  arrive — a connection that stalls mid-body fails closed within the deadline
+  instead of hanging. The body is also read through a capped streaming reader
+  (64 KiB) rather than buffered unconditionally, so an oversized or runaway
+  response body cannot be used to exhaust relay memory.
 - The Supabase tables are read-only to `service_role`; every mutation goes
   through the admin-gated, revision-fenced
   `headmaster_admin_set_inference_assignment` RPC, which appends an audit row to
