@@ -166,4 +166,101 @@ describeIfDb("mutateAgentManagedConfig against real Postgres", () => {
       }),
     ).rejects.toMatchObject({ code: "agent_not_found" });
   });
+
+  // M2.3 (Masterplan3/PlanAlpha A2): partial update, explicit removal, and
+  // reserved-key rejection were only unit-tested against normalizeSecretOverridePatch
+  // with a mocked pool (agentManagedConfig.test.ts). These exercise the same
+  // semantics end to end against real Postgres and real encrypted storage.
+  test("a partial patch sets one key without touching an existing sibling key", async () => {
+    const agentId = await insertRunningAgent();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { listAgentSecretOverrides } = require("../agentSecretOverrides");
+
+    const first = await mutateAgentManagedConfig({
+      pool,
+      agentId,
+      expectedRevision: 0,
+      secretPatch: { set: { EXISTING_KEY: "untouched-value" } },
+      addDeploymentJob: async () => {},
+    });
+    expect(first.desired_revision).toBe(1);
+
+    // The winning mutation's own redeploy side effect moved the agent out of
+    // 'running' (see the concurrent-patch test above); restore it so the
+    // second mutation is accepted on its own merits.
+    await pool.query("UPDATE agents SET status = 'running' WHERE id = $1", [agentId]);
+
+    const second = await mutateAgentManagedConfig({
+      pool,
+      agentId,
+      expectedRevision: 1,
+      secretPatch: { set: { NEW_KEY: "new-value" } },
+      addDeploymentJob: async () => {},
+    });
+    expect(second.desired_revision).toBe(2);
+
+    const overrides = await listAgentSecretOverrides(agentId, { decryptValues: true, queryable: pool });
+    expect(overrides).toEqual({ EXISTING_KEY: "untouched-value", NEW_KEY: "new-value" });
+  });
+
+  test("an explicit delete removes the key from encrypted storage, not just from the response", async () => {
+    const agentId = await insertRunningAgent();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { listAgentSecretOverrides } = require("../agentSecretOverrides");
+
+    await mutateAgentManagedConfig({
+      pool,
+      agentId,
+      expectedRevision: 0,
+      secretPatch: { set: { KEEP_KEY: "keep", REMOVE_KEY: "remove-me" } },
+      addDeploymentJob: async () => {},
+    });
+    await pool.query("UPDATE agents SET status = 'running' WHERE id = $1", [agentId]);
+
+    const result = await mutateAgentManagedConfig({
+      pool,
+      agentId,
+      expectedRevision: 1,
+      secretPatch: { delete: ["REMOVE_KEY"] },
+      addDeploymentJob: async () => {},
+    });
+    expect(result.desired_revision).toBe(2);
+    // key_names on the mutation response is the set of keys THIS patch touched
+    // (set ∪ delete), not the full current key list — that full list is what
+    // listAgentSecretOverrides below actually verifies.
+    expect(result.key_names).toEqual(["REMOVE_KEY"]);
+
+    const overrides = await listAgentSecretOverrides(agentId, { decryptValues: true, queryable: pool });
+    expect(overrides).toEqual({ KEEP_KEY: "keep" });
+    expect(overrides).not.toHaveProperty("REMOVE_KEY");
+    const { rows } = await pool.query(
+      "SELECT env_key FROM agent_secret_overrides WHERE agent_id = $1 AND env_key = $2",
+      [agentId, "REMOVE_KEY"],
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  test("a patch that tries to set a Nora-reserved key is rejected before any row is mutated", async () => {
+    const agentId = await insertRunningAgent();
+
+    await expect(
+      mutateAgentManagedConfig({
+        pool,
+        agentId,
+        expectedRevision: 0,
+        secretPatch: { set: { NORA_INTERNAL_TOKEN: "should-never-land" } },
+        addDeploymentJob: async () => {},
+      }),
+    ).rejects.toMatchObject({ code: "reserved_secret_override_key" });
+
+    // Validation runs before the lock/transaction is even opened — the
+    // revision must not have advanced and no override row exists.
+    const snapshot = await getAgentManagedConfigSnapshot(agentId, { queryable: pool, decryptSecrets: false });
+    expect(snapshot.desiredRevision).toBe(0);
+    const { rows } = await pool.query(
+      "SELECT env_key FROM agent_secret_overrides WHERE agent_id = $1",
+      [agentId],
+    );
+    expect(rows).toHaveLength(0);
+  });
 });
