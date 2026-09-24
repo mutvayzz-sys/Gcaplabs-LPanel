@@ -15,6 +15,8 @@ const mockGetDeploymentProvider = jest.fn();
 const mockGetIntegrationEnvVars = jest.fn();
 const mockGetIntegrationsForSync = jest.fn();
 const mockGetEnabledMcpRuntimeState = jest.fn();
+const mockGetAgentManagedConfigSnapshot = jest.fn();
+const mockBuildAgentManagedConfigRuntimeEnv = jest.fn();
 const mockWaitForAgentReadiness = jest.fn();
 const mockAssertRemoteHostAgentUse = jest.fn();
 const mockGetAgentSecretEnvVars = jest.fn();
@@ -62,6 +64,12 @@ jest.mock("../../workers/provisioner/node_modules/pg", () => ({
 jest.mock("../lib/connectionConfig", () => ({
   buildPostgresConfig: jest.fn().mockReturnValue({}),
   createRedisClient: jest.fn().mockReturnValue({}),
+}));
+jest.mock("../agentManagedConfig", () => ({
+  getAgentManagedConfigSnapshot: (...args) => mockGetAgentManagedConfigSnapshot(...args),
+  buildAgentManagedConfigRuntimeEnv: (...args) => mockBuildAgentManagedConfigRuntimeEnv(...args),
+  markAgentManagedConfigApplied: jest.fn().mockResolvedValue(true),
+  markAgentManagedConfigFailed: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock("../llmProviders", () => ({
   getDeploymentProvider: mockGetDeploymentProvider,
@@ -146,6 +154,7 @@ const {
   materializeHermesTemplatePayload,
 } = require("../../workers/provisioner/worker");
 const { DASHBOARD_PORT_PURPOSE, GATEWAY_PORT_PURPOSE } = require("../portAllocations");
+const { reconcileProviderStateUntilStable } = require("../../workers/provisioner/deploymentLifecycle.ts");
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -162,6 +171,13 @@ beforeEach(() => {
     desiredServers: {},
     env: {},
     managedEnvNames: [],
+  });
+  mockGetAgentManagedConfigSnapshot.mockReset().mockResolvedValue({ desiredRevision: 0 });
+  mockBuildAgentManagedConfigRuntimeEnv.mockReset().mockReturnValue({
+    secretOverrides: {},
+    headmasterIntegrationEnv: {},
+    integrationEnvNames: [],
+    desiredRevision: 0,
   });
   mockWaitForAgentReadiness.mockReset().mockResolvedValue({
     ok: true,
@@ -1501,7 +1517,7 @@ describe("provisioner deployment lifecycle", () => {
         gatewayHost: "remote.example.test",
         gatewayPort: 19123,
         gatewayHostPort: 19123,
-        gatewayToken: "runtime-token",
+        gatewayToken: "a".repeat(64),
       };
     });
     mockLockClient.query
@@ -1607,7 +1623,7 @@ describe("provisioner deployment lifecycle", () => {
         gatewayHost: "remote.example.test",
         gatewayPort: 19123,
         gatewayHostPort: 19123,
-        gatewayToken: "runtime-token",
+        gatewayToken: "a".repeat(64),
       };
     });
     mockLockClient.query
@@ -1785,7 +1801,7 @@ describe("provisioner deployment lifecycle", () => {
         gatewayHost: "10.0.0.9",
         gatewayPort: 8642,
         gatewayHostPort: config.gatewayHostPort,
-        gatewayToken: "runtime-token",
+        gatewayToken: "a".repeat(64),
         dashboardPort: config.dashboardHostPort,
       };
     });
