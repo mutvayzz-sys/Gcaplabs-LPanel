@@ -12,11 +12,49 @@ export const ASSIGNMENT_TTL_MIN_MS = 1_000
 export const ASSIGNMENT_TTL_MAX_MS = 300_000
 export const DEFAULT_ASSIGNMENT_TIMEOUT_MS = 10_000
 export const ASSIGNMENT_SELECT = 'owner_id,nora_user_id,provider_id,enabled,revision'
+// The assignment row is five small scalar fields; a legitimate response never
+// approaches this size. Anything larger indicates a broken or hostile read
+// surface and is rejected without buffering it in full.
+export const ASSIGNMENT_MAX_BODY_BYTES = 65_536
 const ASSIGNMENT_PATH = '/rest/v1/headmaster_inference_assignments'
 const quietLogger = { info() {}, warn() {}, error() {} }
 
 function assignmentError(message, code) {
   return Object.assign(new Error(message), { code })
+}
+
+// Rejects with the signal's abort reason as soon as it aborts. Racing this
+// against a body read keeps the lookup deadline active through body
+// consumption, not just until response headers arrive.
+function abortRejection(signal) {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise((_, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+  })
+}
+
+// Reads the response body under the same deadline/abort signal used for the
+// request, and refuses to buffer more than ASSIGNMENT_MAX_BODY_BYTES. A
+// stalled or oversized body fails closed exactly like a stalled connect.
+async function readBoundedBody(response, signal) {
+  const reader = response.body?.getReader?.()
+  if (!reader) return response.text()
+  const chunks = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > ASSIGNMENT_MAX_BODY_BYTES) {
+        throw assignmentError('headmaster inference assignment lookup body exceeded the size limit', 'assignment_lookup_invalid')
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+  return Buffer.concat(chunks.map(chunk => Buffer.from(chunk))).toString('utf8')
 }
 
 export function clampAssignmentTtl(raw, fallback = DEFAULT_ASSIGNMENT_TTL_MS) {
@@ -79,45 +117,60 @@ export function createSupabaseAssignmentResolver({
   async function fetchAssignmentRow(ownerId) {
     const url = `${base}${ASSIGNMENT_PATH}?owner_id=eq.${ownerId}&limit=2&select=${ASSIGNMENT_SELECT}`
     const controller = new AbortController()
+    // The deadline stays active through body consumption below, not just
+    // until fetchImpl resolves: a response that stalls mid-body must also
+    // fail closed within timeoutMs, not hang indefinitely.
     const timer = setTimeout(
       () => controller.abort(assignmentError('headmaster inference assignment lookup timed out', 'assignment_lookup_timeout')),
       timeoutMs,
     )
     timer.unref?.()
-    let response
     try {
-      response = await fetchImpl(url, {
-        method: 'GET',
-        redirect: 'error',
-        signal: controller.signal,
-        headers: {
-          apikey: key,
-          authorization: `Bearer ${key}`,
-          accept: 'application/json',
-        },
-      })
-    } catch (error) {
-      if (error?.code === 'assignment_lookup_timeout') throw error
-      throw assignmentError('headmaster inference assignment lookup failed', 'assignment_lookup_failed')
+      let response
+      try {
+        response = await Promise.race([
+          fetchImpl(url, {
+            method: 'GET',
+            redirect: 'error',
+            signal: controller.signal,
+            headers: {
+              apikey: key,
+              authorization: `Bearer ${key}`,
+              accept: 'application/json',
+            },
+          }),
+          abortRejection(controller.signal),
+        ])
+      } catch (error) {
+        if (error?.code === 'assignment_lookup_timeout') throw error
+        throw assignmentError('headmaster inference assignment lookup failed', 'assignment_lookup_failed')
+      }
+      if (!response || !response.ok) {
+        throw assignmentError('headmaster inference assignment lookup failed', 'assignment_lookup_failed')
+      }
+      let body
+      try {
+        body = await Promise.race([readBoundedBody(response, controller.signal), abortRejection(controller.signal)])
+      } catch (error) {
+        if (error?.code === 'assignment_lookup_timeout' || error?.code === 'assignment_lookup_invalid') throw error
+        throw assignmentError('headmaster inference assignment lookup returned an invalid body', 'assignment_lookup_invalid')
+      }
+      let rows
+      try { rows = JSON.parse(body) } catch {
+        throw assignmentError('headmaster inference assignment lookup returned an invalid body', 'assignment_lookup_invalid')
+      }
+      if (!Array.isArray(rows)) {
+        throw assignmentError('headmaster inference assignment lookup returned an invalid body', 'assignment_lookup_invalid')
+      }
+      if (rows.length > 1) {
+        // More than one row for a primary key means a broken read surface; fail closed.
+        throw assignmentError('headmaster inference assignment lookup is ambiguous', 'assignment_lookup_anomaly')
+      }
+      if (rows.length === 0) return null
+      return normalizeAssignmentRow(rows[0], ownerId)
     } finally {
       clearTimeout(timer)
     }
-    if (!response || !response.ok) {
-      throw assignmentError('headmaster inference assignment lookup failed', 'assignment_lookup_failed')
-    }
-    let rows
-    try { rows = await response.json() } catch {
-      throw assignmentError('headmaster inference assignment lookup returned an invalid body', 'assignment_lookup_invalid')
-    }
-    if (!Array.isArray(rows)) {
-      throw assignmentError('headmaster inference assignment lookup returned an invalid body', 'assignment_lookup_invalid')
-    }
-    if (rows.length > 1) {
-      // More than one row for a primary key means a broken read surface; fail closed.
-      throw assignmentError('headmaster inference assignment lookup is ambiguous', 'assignment_lookup_anomaly')
-    }
-    if (rows.length === 0) return null
-    return normalizeAssignmentRow(rows[0], ownerId)
   }
 
   // Successful lookups (present or absent) are cached for at most ttlMs. Errors

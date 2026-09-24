@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  ASSIGNMENT_MAX_BODY_BYTES,
   ASSIGNMENT_TTL_MAX_MS,
   ASSIGNMENT_TTL_MIN_MS,
   clampAssignmentTtl,
@@ -163,6 +164,32 @@ test('a lookup that stalls aborts after the configured timeout and fails closed'
     { timeoutMs: 20 },
   )
   await assert.rejects(resolver.resolveAssignment(OWNER), error => error.code === 'assignment_lookup_timeout')
+})
+
+test('a response that stalls mid-body (headers arrive, body never completes) aborts after the timeout and fails closed', async () => {
+  const { resolver } = makeResolver(
+    () => new Response(new ReadableStream({ pull() { /* never enqueues or closes */ } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }),
+    { timeoutMs: 20 },
+  )
+  await assert.rejects(resolver.resolveAssignment(OWNER), error => error.code === 'assignment_lookup_timeout')
+})
+
+test('an oversized response body is rejected without buffering it in full', async () => {
+  const oversized = new ReadableStream({
+    start(controller) {
+      const chunk = new Uint8Array(8192).fill(97)
+      const chunksNeeded = Math.ceil((ASSIGNMENT_MAX_BODY_BYTES + 1) / chunk.byteLength)
+      for (let i = 0; i < chunksNeeded; i += 1) controller.enqueue(chunk)
+      controller.close()
+    },
+  })
+  const { resolver } = makeResolver(
+    () => new Response(oversized, { status: 200, headers: { 'content-type': 'application/json' } }),
+  )
+  await assert.rejects(resolver.resolveAssignment(OWNER), error => error.code === 'assignment_lookup_invalid')
 })
 
 test('assignment TTL clamps to the documented window and the origin must be a bare https URL', () => {
