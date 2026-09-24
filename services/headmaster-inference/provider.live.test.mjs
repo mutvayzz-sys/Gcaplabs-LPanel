@@ -249,7 +249,7 @@ test('live: non-streaming chat completion', { skip: LIVE_SKIP }, async t => {
   const body = Buffer.from(JSON.stringify({
     model: LIVE_MODEL,
     messages: [{ role: 'user', content: 'Reply with exactly: pong' }],
-    max_tokens: 64,
+    max_tokens: 256,
   }))
   const response = await postCompletion(f.origin, body, makeToken({ method: 'POST', path: '/v1/chat/completions', body }))
   assert.equal(response.status, 200)
@@ -273,7 +273,9 @@ test('live: non-streaming chat completion', { skip: LIVE_SKIP }, async t => {
 test('live: streaming SSE passthrough and usage accounting', { skip: LIVE_SKIP }, async t => {
   const { fetchImpl, calls } = recordingFetch()
   const f = await startService(t, { fetchImpl })
-  const maxTokens = 64
+  // Reasoning-capable models spend part of this budget on reasoning deltas
+  // before any content arrives; keep enough headroom for both.
+  const maxTokens = 256
   const body = Buffer.from(JSON.stringify({
     model: LIVE_MODEL,
     stream: true,
@@ -294,8 +296,12 @@ test('live: streaming SSE passthrough and usage accounting', { skip: LIVE_SKIP }
     .map(line => line.slice(5).trim())
     .filter(data => data !== '[DONE]')
     .map(data => JSON.parse(data))
-  assert.ok(frames.some(frame => (frame.choices?.[0]?.delta?.content || '').length > 0),
-    'expected at least one streamed content delta')
+  assert.ok(frames.some(frame => {
+    const delta = frame.choices?.[0]?.delta || {}
+    const content = typeof delta.content === 'string' ? delta.content : ''
+    const reasoning = String(delta.reasoning ?? delta.reasoning_content ?? '')
+    return content.length > 0 || reasoning.length > 0
+  }), 'expected at least one streamed delta (content or reasoning)')
 
   assert.equal(calls.length, 1)
   assert.equal(calls[0].options.headers.accept, 'text/event-stream')
