@@ -81,7 +81,7 @@ of it. "Covered models" are the ids the live suite exercises end to end.
 
 | Provider   | Endpoint                                   | Covered models                                                     | Live run status (this change) |
 | ---------- | ------------------------------------------ | ------------------------------------------------------------------ | ----------------------------- |
-| openrouter | `https://openrouter.ai/api/v1`             | `deepseek/deepseek-v4.1-flash`                                     | protocol wiring + real auth-failure probe **run and passing**; chat/stream/tool/cancel suite ready, key-gated run **pending** (see below) |
+| openrouter | `https://openrouter.ai/api/v1`             | `deepseek/deepseek-v4.1-flash`                                     | full key-gated live suite **run and passing** 2026-09-25, incl. chat/stream/tool/cancel (see below) |
 | openai     | `https://api.openai.com/v1`                | `gpt-5.5`, `gpt-5.5-pro`                                           | pre-existing coverage, not re-run in this change |
 | groq       | `https://api.groq.com/openai/v1`           | `llama-3.3-70b-versatile`                                          | pre-existing coverage, not re-run |
 | mistral    | `https://api.mistral.ai/v1`                | `mistral-large-latest`                                             | pre-existing coverage, not re-run |
@@ -129,17 +129,33 @@ Observed in this environment (2026-09-24):
   `structured_outputs` (so the max_tokens default the relay injects and the
   tool-call scenario are within the model's declared surface).
 
-**Not run in this environment:** the key-gated chat/streaming/tool-call/
-cancellation scenarios. Access to `OPENROUTER_API_KEY` was denied by the
-operator during this task (the extraction command was blocked, and per its
-result it was not retried), so no funded live run happened here. The suite skips
-cleanly without the key; the parent/operator must run the third command above
-and record its outcome before declaring production support for OpenRouter. The
-relay-side mechanics of those scenarios (SSE passthrough, usage-frame
-accounting branch, cancellation abort/reservation release/non-retry) were
-verified against a local stub upstream during development and are additionally
-covered by the hermetic tests — that is harness verification, **not** provider
-evidence, and must not be cited as such.
+**Update, 2026-09-25 (owner-approved funded run, Headmaster-Ecosystem plan
+task 5.7):** the operator supplied the trial key
+(`C:\Users\Matve\Documents\Headmaster-Ecosystem\.secrets\openrouter-trial.env`,
+never printed or committed) for a full key-gated run of the third command
+above, against `HEADMASTER_LIVE_MODEL=deepseek/deepseek-v4.1-flash` (the
+default — no override needed).
+
+- `node --test *.test.mjs` (offline suite, no key loaded) → **40 tests, 33
+  pass, 7 skipped, 0 fail**. Skips: 2 Redis-dependent quota tests (`REDIS_URL`
+  unset) and 5 key-gated `live:` tests (`OPENROUTER_API_KEY` unset in this
+  run).
+- `OPENROUTER_API_KEY=<trial key> node --test provider.live.test.mjs` → **9
+  tests, 9 pass, 0 skipped, 0 fail**. Every `live:` test ran (none skipped):
+  non-streaming chat completion, streaming SSE passthrough + usage accounting,
+  one tool-call turn, client cancellation (upstream abort + reservation
+  release verified against the real endpoint, not a stub), and the
+  invalid-credential auth-failure probe. All against the real
+  `https://openrouter.ai/api/v1/chat/completions`, using a handful of small
+  completions against the cheap `deepseek/deepseek-v4.1-flash` model (owner
+  approved spending the trial key on this).
+
+This supersedes the 2026-09-24 entry above: the key-gated chat/streaming/
+tool-call/cancellation scenarios that were previously "not run in this
+environment" are now run and passing against the real provider. The SSE
+passthrough, usage-frame accounting, and cancellation abort/reservation-release
+mechanics are now confirmed as provider evidence, not just harness
+verification.
 
 ## Relationship to the rest of M6
 
