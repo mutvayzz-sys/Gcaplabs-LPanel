@@ -149,6 +149,18 @@ the bearer token and checking current account entitlement.
   daily completion-token budget using reservations. Provider usage is recorded
   as token counts only; prompts and completions are not logged. When a provider
   omits usage, the reserved output limit is charged conservatively.
+- The **code default** for the hourly request budget
+  (`HEADMASTER_INFERENCE_REQUESTS_PER_HOUR`, `server.ts`) is **120 requests/hour**
+  per account. The **production value** is set separately in the deployed
+  `inference.env` file on the relay host and may differ from the code default;
+  read it from the running container by variable name only (never print the
+  full env dump), e.g. `docker inspect headmaster-inference --format
+  '{{range .Config.Env}}{{println .}}{{end}}' | grep REQUESTS_PER_HOUR`.
+- A quota-exhausted request fails with HTTP 429 and a stable `error.code`:
+  `request_budget_exceeded` (hourly request count) or
+  `completion_budget_exceeded` (daily completion-token budget). These are the
+  exact names the Headmaster desktop client's trial-limit banner matches on;
+  a test in `lib.test.mjs` pins them.
 - Provider failures are mapped to stable safe error codes; provider response
   bodies are not returned on errors. Client cancellation is not retried.
 

@@ -259,6 +259,26 @@ test('provider rate limits expose a safe retry-after without leaking the provide
   assert.equal(JSON.parse(result).error.code, 'provider_rate_limited')
 })
 
+test('quota exhaustion maps to the exact Appendix B codes the desktop client expects', async t => {
+  // The desktop's `trialLimitCodeFrom` (electron/headmaster-service-proxy.ts)
+  // only recognizes a 429 with error.code 'request_budget_exceeded' or
+  // 'completion_budget_exceeded'. This pins quota.mjs's internal reasons
+  // ('request_budget' / 'token_budget') to those exact HTTP-level names so a
+  // future rename of either side is caught here instead of live.
+  const requestBudgetQuota = createMemoryQuotaStore({ maxRequestsPerHour: 0, maxCompletionTokensPerDay: 1_000, now: () => NOW })
+  const requestBudgetService = await startService(t, { quotaStore: requestBudgetQuota })
+  const body = Buffer.from(JSON.stringify({ model: 'gpt-5.5', messages: [{ role: 'user', content: 'hi' }] }))
+  const requestBudgetResponse = await postCompletion(requestBudgetService.origin, body, makeToken({ method: 'POST', path: '/v1/chat/completions', body }))
+  assert.equal(requestBudgetResponse.status, 429)
+  assert.equal((await requestBudgetResponse.json()).error.code, 'request_budget_exceeded')
+
+  const tokenBudgetQuota = createMemoryQuotaStore({ maxRequestsPerHour: 1_000, maxCompletionTokensPerDay: 0, now: () => NOW })
+  const tokenBudgetService = await startService(t, { quotaStore: tokenBudgetQuota })
+  const tokenBudgetResponse = await postCompletion(tokenBudgetService.origin, body, makeToken({ method: 'POST', path: '/v1/chat/completions', body }))
+  assert.equal(tokenBudgetResponse.status, 429)
+  assert.equal((await tokenBudgetResponse.json()).error.code, 'completion_budget_exceeded')
+})
+
 test('Redis replay store atomically consumes a nonce once across relay instances', async () => {
   const seen = new Set()
   const calls = []
