@@ -270,7 +270,7 @@ class HermesBackend extends DockerBackend {
 
     const composeNetwork = await this._findComposeNetwork();
     const networkingConfig = composeNetwork ? { [composeNetwork]: {} } : undefined;
-    const hostname = safeHostname(name || containerName, `hermes-${id}`);
+    const hostname = safeHostname(name || containerName, `hm-${id}`);
 
     try {
       throwIfAborted(abortSignal, `hermes create for ${containerName}`);

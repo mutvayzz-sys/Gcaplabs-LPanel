@@ -5,16 +5,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#071018",
-        foreground: "#eef4fb",
-        primary: "#8ae6ff",
+        background: "#111310",
+        foreground: "#f3f4ef",
+        primary: "#cfefa5",
         secondary: "#64748b",
         brand: {
-          ink: "#071018",
-          foreground: "#eef4fb",
-          cyan: "#8ae6ff",
-          gold: "#f2d7a1",
-          orange: "#ea8d3d",
+          ink: "#111310",
+          foreground: "#f3f4ef",
+          cyan: "#cfefa5",
+          gold: "#e5d8a7",
+          orange: "#edaa86",
         },
       },
     },

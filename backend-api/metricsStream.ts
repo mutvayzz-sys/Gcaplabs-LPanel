@@ -38,15 +38,54 @@ function attachMetricsStream(server) {
       return;
     }
 
+    // Headmaster-launched sessions: fail closed when revoked or when shared
+    // session state cannot be reached. Only hm sessions take the async path;
+    // native sessions keep the original synchronous upgrade.
+    if (payload.hm) {
+      require("./headmasterLaunch")
+        .assertPrivilegedSocketSession(payload)
+        .then(() => {
+          wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit("connection", ws, {
+              agentId: match[1],
+              user: { id: payload.id, role: payload.role, hm: payload.hm, jti: payload.jti },
+            });
+          });
+        })
+        .catch(() => {
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+        });
+      return;
+    }
+
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit("connection", ws, {
         agentId: match[1],
-        user: { id: payload.id, role: payload.role },
+        user: { id: payload.id, role: payload.role, hm: payload.hm, jti: payload.jti },
       });
     });
   });
 
   wss.on("connection", async (ws, { agentId, user }) => {
+    // Headmaster-launched sessions: close revoked connections within the
+    // bounded revocation delay.
+    let unregisterRevokedSocket = () => {};
+    if (user && user.hm) {
+      try {
+        unregisterRevokedSocket = await require("./headmasterLaunch").registerPrivilegedSocket(
+          user,
+          () => {
+            if (ws.readyState === 1) ws.close();
+          },
+        );
+      } catch {
+        if (ws.readyState === 1) ws.close();
+        return;
+      }
+      ws.on("close", () => unregisterRevokedSocket());
+    }
+
     let closed = false;
     let snapshotInterval = null;
     let authorizationInterval = null;

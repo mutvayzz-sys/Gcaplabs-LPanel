@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, LogOut, Menu } from "lucide-react";
+import { ChevronDown, LogOut, Menu } from "lucide-react";
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
 import { useRouter } from "next/router";
@@ -82,7 +82,7 @@ export default function Topbar({ onMenuClick }) {
   };
 
   return (
-    <div className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b border-brand-cyan/20 bg-white/82 px-4 backdrop-blur-md md:h-20 md:px-8">
+    <div className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b border-brand-cyan/20 hm-topbar px-4 backdrop-blur-md md:h-20 md:px-8">
       <div className="flex items-center gap-4 min-w-0">
         <button
           className="shrink-0 rounded-xl p-2 text-slate-500 transition-all hover:bg-brand-cyan/12 hover:text-brand-ink lg:hidden"
@@ -102,10 +102,6 @@ export default function Topbar({ onMenuClick }) {
       <div className="flex items-center gap-3 md:gap-6 shrink-0">
         <WorkspaceSwitcher className="hidden md:inline-flex" />
         <LanguageSwitcher className="hidden sm:inline-flex" />
-        <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700">
-          <CheckCircle2 size={14} />
-          <span className="text-xs font-bold">{t("Operational")}</span>
-        </div>
 
         <div className="relative">
           <button

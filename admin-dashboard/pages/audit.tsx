@@ -21,6 +21,7 @@ import {
 import AdminLayout from "../components/AdminLayout";
 import { fetchWithAuth } from "../lib/api";
 import { formatCount, formatDateTime, formatShortId } from "../lib/format";
+import { useI18n } from "../lib/i18n";
 
 const PAGE_SIZE_OPTIONS = [10, 30, 50, 100];
 
@@ -82,13 +83,13 @@ function formatJson(value) {
   }
 }
 
-function formatSourceKind(kind) {
-  if (kind === "account") return "Account";
-  if (kind === "request") return "Request";
-  return "System";
+function formatSourceKind(kind, t) {
+  if (kind === "account") return t("Account");
+  if (kind === "request") return t("Request");
+  return t("System");
 }
 
-function resolveSource(metadata) {
+function resolveSource(metadata, t) {
   const source = metadata.source || {};
   const actor = metadata.actor || {};
   const account =
@@ -109,7 +110,7 @@ function resolveSource(metadata) {
       source.label ||
       account?.email ||
       account?.userId ||
-      (kind === "request" ? "Unauthenticated request" : `System · ${service}`),
+      (kind === "request" ? t("Unauthenticated request") : `${t("System")} · ${service}`),
     service,
     channel: source.channel || null,
     account,
@@ -119,8 +120,8 @@ function resolveSource(metadata) {
   };
 }
 
-function formatSourceDetail(source) {
-  const parts = [formatSourceKind(source.kind)];
+function formatSourceDetail(source, t) {
+  const parts = [formatSourceKind(source.kind, t)];
   if (source.service) parts.push(source.service);
   if (source.channel) parts.push(source.channel);
   return parts.join(" · ");
@@ -133,16 +134,16 @@ function formatSourceAccountValue(source) {
   return details.filter(Boolean).join(" · ");
 }
 
-function formatRequestOrigin(source) {
+function formatRequestOrigin(source, t) {
   const lines = [];
-  if (source.ip) lines.push(`IP: ${source.ip}`);
-  if (source.origin) lines.push(`Origin: ${source.origin}`);
-  if (source.userAgent) lines.push(`User agent: ${source.userAgent}`);
+  if (source.ip) lines.push(`${t("IP:")} ${source.ip}`);
+  if (source.origin) lines.push(`${t("Origin:")} ${source.origin}`);
+  if (source.userAgent) lines.push(`${t("User agent:")} ${source.userAgent}`);
   return lines.join("\n") || null;
 }
 
-function formatEventTypeLabel(type) {
-  if (!type) return "All activity";
+function formatEventTypeLabel(type, t) {
+  if (!type) return t("All activity");
   return type.replace(/_/g, " ");
 }
 
@@ -220,13 +221,13 @@ function DetailBox({ label, value, tone = "slate" }) {
   );
 }
 
-function buildHighlights(metadata) {
+function buildHighlights(metadata, t) {
   const items = [];
-  const source = resolveSource(metadata);
+  const source = resolveSource(metadata, t);
 
   items.push({
-    label: "Source",
-    value: formatSourceKind(source.kind),
+    label: t("Source"),
+    value: formatSourceKind(source.kind, t),
     tone:
       source.kind === "account"
         ? "bg-cyan-50 text-cyan-700"
@@ -237,7 +238,7 @@ function buildHighlights(metadata) {
 
   if (metadata.actor?.email || metadata.actor?.userId) {
     items.push({
-      label: "Actor",
+      label: t("Actor"),
       value: metadata.actor.email || formatShortId(metadata.actor.userId),
       tone: "bg-slate-100 text-slate-700",
     });
@@ -245,7 +246,7 @@ function buildHighlights(metadata) {
 
   if (metadata.agent?.ownerEmail || metadata.agent?.ownerUserId) {
     items.push({
-      label: "Owner",
+      label: t("Owner"),
       value: metadata.agent.ownerEmail || formatShortId(metadata.agent.ownerUserId),
       tone: "bg-blue-50 text-blue-700",
     });
@@ -253,7 +254,7 @@ function buildHighlights(metadata) {
 
   if (metadata.user?.email || metadata.user?.id) {
     items.push({
-      label: "User",
+      label: t("User"),
       value: metadata.user.email || formatShortId(metadata.user.id),
       tone: "bg-emerald-50 text-emerald-700",
     });
@@ -261,7 +262,7 @@ function buildHighlights(metadata) {
 
   if (metadata.agent?.name || metadata.agent?.id) {
     items.push({
-      label: "Agent",
+      label: t("Agent"),
       value: metadata.agent.name || formatShortId(metadata.agent.id),
       tone: "bg-violet-50 text-violet-700",
     });
@@ -269,7 +270,7 @@ function buildHighlights(metadata) {
 
   if (metadata.listing?.name || metadata.listing?.id) {
     items.push({
-      label: "Listing",
+      label: t("Listing"),
       value: metadata.listing.name || formatShortId(metadata.listing.id),
       tone: "bg-amber-50 text-amber-700",
     });
@@ -277,7 +278,7 @@ function buildHighlights(metadata) {
 
   if (metadata.request?.method && metadata.request?.path) {
     items.push({
-      label: "Request",
+      label: t("Request"),
       value: `${metadata.request.method} ${metadata.request.path}`,
       tone: "bg-slate-950 text-slate-100",
     });
@@ -285,7 +286,7 @@ function buildHighlights(metadata) {
 
   if (metadata.request?.correlationId) {
     items.push({
-      label: "Ref",
+      label: t("Ref"),
       value: formatShortId(metadata.request.correlationId, 12),
       tone: "bg-slate-200 text-slate-700",
     });
@@ -293,7 +294,7 @@ function buildHighlights(metadata) {
 
   if (metadata.result?.nextStatus || metadata.result?.status) {
     items.push({
-      label: "Result",
+      label: t("Result"),
       value: metadata.result.nextStatus || metadata.result.status,
       tone: "bg-rose-50 text-rose-700",
     });
@@ -303,16 +304,17 @@ function buildHighlights(metadata) {
 }
 
 function EventCard({ event }) {
+  const { t } = useI18n();
   const metadata = normalizeMetadata(event.metadata);
-  const source = resolveSource(metadata);
+  const source = resolveSource(metadata, t);
   const config = EVENT_ICONS[event.type] || EVENT_ICONS.default;
   const Icon = config.icon;
-  const highlights = buildHighlights(metadata);
+  const highlights = buildHighlights(metadata, t);
   const errorMessage = metadata.error?.message || null;
   const errorMeta = [
     metadata.error?.name,
     metadata.error?.code,
-    metadata.error?.status ? `status ${metadata.error.status}` : null,
+    metadata.error?.status ? `${t("status")} ${metadata.error.status}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -351,7 +353,7 @@ function EventCard({ event }) {
           {errorMessage ? (
             <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-4">
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-red-500">
-                Error
+                {t("Error")}
               </p>
               <p className="mt-2 text-sm font-semibold text-red-900">{errorMessage}</p>
               {errorMeta ? (
@@ -361,15 +363,19 @@ function EventCard({ event }) {
           ) : null}
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <DetailBox label="Source" value={formatSourceDetail(source)} tone="slate" />
+            <DetailBox label={t("Source")} value={formatSourceDetail(source, t)} tone="slate" />
             <DetailBox
-              label="Source Account"
+              label={t("Source Account")}
               value={formatSourceAccountValue(source)}
               tone="slate"
             />
-            <DetailBox label="Request Origin" value={formatRequestOrigin(source)} tone="slate" />
             <DetailBox
-              label="Role Change"
+              label={t("Request Origin")}
+              value={formatRequestOrigin(source, t)}
+              tone="slate"
+            />
+            <DetailBox
+              label={t("Role Change")}
               value={
                 metadata.result?.previousRole && metadata.result?.nextRole
                   ? `${metadata.result.previousRole} -> ${metadata.result.nextRole}`
@@ -378,7 +384,7 @@ function EventCard({ event }) {
               tone="blue"
             />
             <DetailBox
-              label="Name Change"
+              label={t("Name Change")}
               value={
                 metadata.result?.previousName && metadata.result?.nextName
                   ? `${metadata.result.previousName} -> ${metadata.result.nextName}`
@@ -387,7 +393,7 @@ function EventCard({ event }) {
               tone="blue"
             />
             <DetailBox
-              label="Status Change"
+              label={t("Status Change")}
               value={
                 metadata.result?.previousStatus && metadata.result?.nextStatus
                   ? `${metadata.result.previousStatus} -> ${metadata.result.nextStatus}`
@@ -396,34 +402,45 @@ function EventCard({ event }) {
               tone="blue"
             />
             <DetailBox
-              label="Deleted Assets"
+              label={t("Deleted Assets")}
               value={
                 metadata.result?.deletedAgentCount
-                  ? `Deleted ${metadata.result.deletedAgentCount} owned agents`
+                  ? t("Deleted {count} owned agents").replace(
+                      "{count}",
+                      String(metadata.result.deletedAgentCount),
+                    )
                   : metadata.result?.deleted
-                    ? "Deleted"
+                    ? t("Deleted")
                     : null
               }
               tone="blue"
             />
-            <DetailBox label="Review Notes" value={metadata.review?.notes || null} tone="slate" />
-            <DetailBox label="Report Reason" value={metadata.report?.reason || null} tone="slate" />
             <DetailBox
-              label="Report Details"
+              label={t("Review Notes")}
+              value={metadata.review?.notes || null}
+              tone="slate"
+            />
+            <DetailBox
+              label={t("Report Reason")}
+              value={metadata.report?.reason || null}
+              tone="slate"
+            />
+            <DetailBox
+              label={t("Report Details")}
               value={metadata.reportDetails?.details || null}
               tone="slate"
             />
             <DetailBox
-              label="Deploy Context"
+              label={t("Deploy Context")}
               value={
                 metadata.deploy
-                  ? `${metadata.deploy.type || "deploy"} · ${metadata.deploy.specs?.vcpu || "?"} vCPU · ${metadata.deploy.specs?.ram_mb || "?"} MB RAM · ${metadata.deploy.specs?.disk_gb || "?"} GB disk`
+                  ? `${metadata.deploy.type || t("deploy")} · ${metadata.deploy.specs?.vcpu || "?"} ${t("vCPU")} · ${metadata.deploy.specs?.ram_mb || "?"} ${t("MB RAM")} · ${metadata.deploy.specs?.disk_gb || "?"} ${t("GB disk")}`
                   : null
               }
               tone="slate"
             />
             <DetailBox
-              label="Source Agent"
+              label={t("Source Agent")}
               value={metadata.sourceAgent?.name || metadata.sourceAgent?.id || null}
               tone="slate"
             />
@@ -431,7 +448,7 @@ function EventCard({ event }) {
 
           <details className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-slate-100">
             <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold">
-              <span>Raw event metadata</span>
+              <span>{t("Raw event metadata")}</span>
               <ChevronDown size={16} className="text-slate-400" />
             </summary>
             <pre className="max-h-[420px] overflow-auto border-t border-slate-800 p-4 text-xs leading-relaxed text-slate-200">
@@ -445,6 +462,7 @@ function EventCard({ event }) {
 }
 
 export default function AuditPage() {
+  const { t } = useI18n();
   const [events, setEvents] = useState([]);
   const [availableTypes, setAvailableTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -493,7 +511,7 @@ export default function AuditPage() {
         );
         const payload = await response.json().catch(() => null);
         if (!response.ok) {
-          throw new Error(payload?.error || "Failed to load audit log");
+          throw new Error(payload?.error || t("Failed to load audit log"));
         }
 
         setEvents(Array.isArray(payload?.events) ? payload.events : []);
@@ -510,7 +528,7 @@ export default function AuditPage() {
         }
       } catch (loadError) {
         console.error("Failed to load admin audit events:", loadError);
-        setError(loadError.message || "Failed to load audit log");
+        setError(loadError.message || t("Failed to load audit log"));
         if (!silent) {
           setEvents([]);
           setPagination((current) => ({
@@ -525,7 +543,7 @@ export default function AuditPage() {
         setRefreshing(false);
       }
     },
-    [deferredSearch, typeFilter, fromDate, toDate, page, limit],
+    [deferredSearch, typeFilter, fromDate, toDate, page, limit, t],
   );
 
   useEffect(() => {
@@ -555,7 +573,7 @@ export default function AuditPage() {
       );
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error || "Failed to export audit log");
+        throw new Error(payload?.error || t("Failed to export audit log"));
       }
 
       const blob = await response.blob();
@@ -569,11 +587,11 @@ export default function AuditPage() {
       window.URL.revokeObjectURL(url);
     } catch (exportError) {
       console.error("Failed to export audit log:", exportError);
-      setError(exportError.message || "Failed to export audit log");
+      setError(exportError.message || t("Failed to export audit log"));
     } finally {
       setExporting(false);
     }
-  }, [search, typeFilter, fromDate, toDate]);
+  }, [search, typeFilter, fromDate, toDate, t]);
 
   const resetFilters = () => {
     setSearch("");
@@ -600,18 +618,19 @@ export default function AuditPage() {
 
   return (
     <AdminLayout>
-      <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-8" data-no-translate>
         <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-red-500">
-              Audit Stream
+              {t("Audit Stream")}
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
-              Platform activity log
+              {t("Platform activity log")}
             </h1>
             <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
-              Search by date range, narrow by event type, page through the audit stream, and export
-              the exact dataset you are reviewing.
+              {t(
+                "Search by date range, narrow by event type, page through the audit stream, and export the exact dataset you are reviewing.",
+              )}
             </p>
           </div>
 
@@ -622,7 +641,7 @@ export default function AuditPage() {
               className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw size={16} className={loading || refreshing ? "animate-spin" : ""} />
-              Refresh
+              {t("Refresh")}
             </button>
 
             <button
@@ -631,7 +650,7 @@ export default function AuditPage() {
               className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
             >
               {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-              Export CSV
+              {t("Export CSV")}
             </button>
           </div>
         </header>
@@ -640,7 +659,7 @@ export default function AuditPage() {
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_repeat(4,minmax(0,1fr))]">
             <label className="block">
               <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                Search
+                {t("Search")}
               </span>
               <div className="relative">
                 <Search
@@ -653,7 +672,7 @@ export default function AuditPage() {
                     setSearch(event.target.value);
                     setPage(1);
                   }}
-                  placeholder="Message, source, actor, owner, request, or error"
+                  placeholder={t("Message, source, actor, owner, request, or error")}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition-colors focus:border-red-200 focus:bg-white"
                 />
               </div>
@@ -661,7 +680,7 @@ export default function AuditPage() {
 
             <label className="block">
               <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                Event Type
+                {t("Event Type")}
               </span>
               <select
                 value={typeFilter}
@@ -671,10 +690,10 @@ export default function AuditPage() {
                 }}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors focus:border-red-200 focus:bg-white"
               >
-                <option value="all">All activity</option>
+                <option value="all">{t("All activity")}</option>
                 {availableTypes.map((type) => (
                   <option key={type} value={type}>
-                    {formatEventTypeLabel(type)}
+                    {formatEventTypeLabel(type, t)}
                   </option>
                 ))}
               </select>
@@ -682,7 +701,7 @@ export default function AuditPage() {
 
             <label className="block">
               <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                From
+                {t("From")}
               </span>
               <input
                 type="date"
@@ -698,7 +717,7 @@ export default function AuditPage() {
 
             <label className="block">
               <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                To
+                {t("To")}
               </span>
               <input
                 type="date"
@@ -714,7 +733,7 @@ export default function AuditPage() {
 
             <label className="block">
               <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                Records / page
+                {t("Records / page")}
               </span>
               <select
                 value={limit}
@@ -736,13 +755,15 @@ export default function AuditPage() {
           <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-500">
               <span>
-                Showing {formatCount(pageStart)}-{formatCount(pageEnd)} of{" "}
-                {formatCount(totalRecords)} events
+                {t("Showing {start}-{end} of {total} events")
+                  .replace("{start}", formatCount(pageStart))
+                  .replace("{end}", formatCount(pageEnd))
+                  .replace("{total}", formatCount(totalRecords))}
               </span>
               {refreshing ? (
                 <span className="inline-flex items-center gap-2 text-red-500">
                   <Loader2 size={14} className="animate-spin" />
-                  Refreshing
+                  {t("Refreshing")}
                 </span>
               ) : null}
             </div>
@@ -754,7 +775,7 @@ export default function AuditPage() {
                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   <FilterX size={16} />
-                  Clear filters
+                  {t("Clear filters")}
                 </button>
               ) : null}
             </div>
@@ -775,7 +796,7 @@ export default function AuditPage() {
               <div className="flex h-56 flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 text-center text-slate-400">
                 <FileText size={34} className="mb-3 opacity-60" />
                 <p className="text-sm font-semibold">
-                  No audit events found for the current filters.
+                  {t("No audit events found for the current filters.")}
                 </p>
               </div>
             ) : (
@@ -789,7 +810,9 @@ export default function AuditPage() {
 
           <div className="mt-6 flex flex-col gap-4 border-t border-slate-100 pt-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-sm font-medium text-slate-500">
-              Page {formatCount(currentPage)} of {formatCount(totalPages)}
+              {t("Page {page} of {total}")
+                .replace("{page}", formatCount(currentPage))
+                .replace("{total}", formatCount(totalPages))}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -799,7 +822,7 @@ export default function AuditPage() {
                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronLeft size={16} />
-                Previous
+                {t("Previous")}
               </button>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -829,7 +852,7 @@ export default function AuditPage() {
                 disabled={currentPage >= totalPages}
                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Next
+                {t("Next")}
                 <ChevronRight size={16} />
               </button>
             </div>

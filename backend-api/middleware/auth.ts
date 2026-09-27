@@ -100,6 +100,15 @@ async function authenticateToken(req, res, next) {
   if (token && tokenSource !== "api_key_header" && !token.startsWith("nora_")) {
     const decoded = tryDecodeSession(token);
     if (decoded) {
+      // Headmaster-launched sessions are tracked server-side: logout, account
+      // switch, suspension, demotion, and link removal revoke them. The check
+      // fails closed when shared storage cannot be reached.
+      if (decoded.hm && decoded.jti) {
+        const headmasterLaunch = require("../headmasterLaunch");
+        if (!(await headmasterLaunch.sessionExists(decoded.jti))) {
+          return res.status(401).json({ error: "Session has been revoked", code: "session_revoked" });
+        }
+      }
       req.user = decoded;
       return next();
     }

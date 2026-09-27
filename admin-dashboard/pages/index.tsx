@@ -14,6 +14,7 @@ import AdminLayout from "../components/AdminLayout";
 import MetricCard from "../components/MetricCard";
 import { fetchWithAuth } from "../lib/api";
 import { formatCount, formatDateTime } from "../lib/format";
+import { useI18n } from "../lib/i18n";
 
 const EVENT_STYLES = {
   agent_deployed: { icon: Activity, tone: "text-emerald-600 bg-emerald-50" },
@@ -50,6 +51,7 @@ function EventRow({ event }) {
 }
 
 export default function AdminHome() {
+  const { t } = useI18n();
   const [metrics, setMetrics] = useState(null);
   const [events, setEvents] = useState([]);
   const [dlqJobs, setDlqJobs] = useState([]);
@@ -95,36 +97,36 @@ export default function AdminHome() {
   const queue = metrics?.queue || {};
   const cards = [
     {
-      label: "Total Users",
+      label: t("Total Users"),
       value: formatCount(metrics?.totalUsers ?? 0),
       icon: Users,
       tone: "blue",
       href: "/users",
-      caption: "Accounts across the platform",
+      caption: t("Accounts across the platform"),
     },
     {
-      label: "Total Agents",
+      label: t("Total Agents"),
       value: formatCount(metrics?.totalAgents ?? 0),
       icon: Server,
       tone: "emerald",
       href: "/fleet",
-      caption: "All runtimes and queued agents",
+      caption: t("All runtimes and queued agents"),
     },
     {
-      label: "Live Agents",
+      label: t("Live Agents"),
       value: formatCount(metrics?.activeAgents ?? 0),
       icon: Activity,
       tone: "purple",
       href: "/fleet",
-      caption: `${formatCount(metrics?.warningAgents ?? 0)} warning · ${formatCount(metrics?.errorAgents ?? 0)} error`,
+      caption: `${formatCount(metrics?.warningAgents ?? 0)} ${t("warning")} · ${formatCount(metrics?.errorAgents ?? 0)} ${t("error")}`,
     },
     {
-      label: "Queue Pressure",
+      label: t("Queue Pressure"),
       value: formatCount(queue.waiting ?? 0),
       icon: TriangleAlert,
       tone: dlqJobs.length > 0 ? "red" : "orange",
       href: "/queue",
-      caption: `${formatCount(dlqJobs.length)} jobs in DLQ`,
+      caption: `${formatCount(dlqJobs.length)} ${t("jobs in DLQ")}`,
     },
   ];
 
@@ -134,14 +136,15 @@ export default function AdminHome() {
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-red-500">
-              Platform Overview
+              {t("Platform Overview")}
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
-              Admin control plane
+              {t("Admin control plane")}
             </h1>
             <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
-              Ops-first visibility for fleet health, queue pressure, user management, and recent
-              platform activity.
+              {t(
+                "Ops-first visibility for fleet health, queue pressure, user management, and recent platform activity.",
+              )}
             </p>
           </div>
 
@@ -153,7 +156,7 @@ export default function AdminHome() {
             className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md"
           >
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Refresh
+            {t("Refresh")}
           </button>
         </header>
 
@@ -174,27 +177,27 @@ export default function AdminHome() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-black tracking-tight text-slate-950">
-                      Queue health
+                      {t("Queue health")}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-slate-500">
-                      Waiting, active, completed, and failed deploy work.
+                      {t("Waiting, active, completed, and failed deploy work.")}
                     </p>
                   </div>
                   <Link
                     href="/queue"
                     className="inline-flex items-center gap-1 text-sm font-semibold text-red-600 transition-colors hover:text-red-700"
                   >
-                    Open queue
+                    {t("Open queue")}
                     <ArrowRight size={15} />
                   </Link>
                 </div>
 
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
                   {[
-                    { label: "Waiting", value: queue.waiting ?? 0 },
-                    { label: "Active", value: queue.active ?? 0 },
-                    { label: "Completed", value: queue.completed ?? 0 },
-                    { label: "Failed", value: queue.failed ?? 0 },
+                    { label: t("Waiting"), value: queue.waiting ?? 0 },
+                    { label: t("Active"), value: queue.active ?? 0 },
+                    { label: t("Completed"), value: queue.completed ?? 0 },
+                    { label: t("Failed"), value: queue.failed ?? 0 },
                   ].map((item) => (
                     <div key={item.label} className="rounded-[1.5rem] bg-slate-50 px-5 py-5">
                       <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
@@ -209,30 +212,32 @@ export default function AdminHome() {
               </section>
 
               <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-black tracking-tight text-slate-950">Attention now</h2>
+                <h2 className="text-lg font-black tracking-tight text-slate-950">
+                  {t("Attention now")}
+                </h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  Quick triage shortcuts for the highest-value admin actions.
+                  {t("Quick triage shortcuts for the highest-value admin actions.")}
                 </p>
 
                 <div className="mt-6 space-y-3">
                   {[
                     {
-                      label: "Warning agents",
+                      label: t("Warning agents"),
                       value: metrics?.warningAgents ?? 0,
                       href: "/fleet",
                     },
                     {
-                      label: "Error agents",
+                      label: t("Error agents"),
                       value: metrics?.errorAgents ?? 0,
                       href: "/fleet",
                     },
                     {
-                      label: "Stopped agents",
+                      label: t("Stopped agents"),
                       value: metrics?.stoppedAgents ?? 0,
                       href: "/fleet",
                     },
                     {
-                      label: "DLQ jobs",
+                      label: t("DLQ jobs"),
                       value: dlqJobs.length,
                       href: "/queue",
                     },
@@ -245,7 +250,7 @@ export default function AdminHome() {
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{item.label}</p>
                         <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Open relevant admin flow
+                          {t("Open relevant admin flow")}
                         </p>
                       </div>
                       <span className="text-2xl font-black text-slate-950">
@@ -262,17 +267,17 @@ export default function AdminHome() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-black tracking-tight text-slate-950">
-                      Recent audit events
+                      {t("Recent audit events")}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-slate-500">
-                      Latest platform-wide activity recorded by the control plane.
+                      {t("Latest platform-wide activity recorded by the control plane.")}
                     </p>
                   </div>
                   <Link
                     href="/audit"
                     className="inline-flex items-center gap-1 text-sm font-semibold text-red-600 transition-colors hover:text-red-700"
                   >
-                    View audit
+                    {t("View audit")}
                     <ArrowRight size={15} />
                   </Link>
                 </div>
@@ -280,7 +285,7 @@ export default function AdminHome() {
                 <div className="mt-4 divide-y divide-slate-100">
                   {events.length === 0 ? (
                     <div className="rounded-[1.5rem] px-4 py-10 text-center text-sm font-medium text-slate-400">
-                      No audit events recorded yet.
+                      {t("No audit events recorded yet.")}
                     </div>
                   ) : (
                     events.map((event) => <EventRow key={event.id} event={event} />)
@@ -292,17 +297,17 @@ export default function AdminHome() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-black tracking-tight text-slate-950">
-                      Dead-letter queue
+                      {t("Dead-letter queue")}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-slate-500">
-                      Most recent failed deployment jobs.
+                      {t("Most recent failed deployment jobs.")}
                     </p>
                   </div>
                   <Link
                     href="/queue"
                     className="inline-flex items-center gap-1 text-sm font-semibold text-red-600 transition-colors hover:text-red-700"
                   >
-                    Inspect jobs
+                    {t("Inspect jobs")}
                     <ArrowRight size={15} />
                   </Link>
                 </div>
@@ -310,7 +315,7 @@ export default function AdminHome() {
                 <div className="mt-5 space-y-3">
                   {dlqJobs.length === 0 ? (
                     <div className="rounded-[1.5rem] bg-emerald-50 px-4 py-5 text-sm font-semibold text-emerald-700">
-                      No failed jobs in the DLQ.
+                      {t("No failed jobs in the DLQ.")}
                     </div>
                   ) : (
                     dlqJobs.slice(0, 4).map((job) => (
@@ -321,18 +326,18 @@ export default function AdminHome() {
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-slate-900">
-                              {job.name || "Deploy job"}
+                              {job.name || t("Deploy job")}
                             </p>
                             <p className="mt-1 text-xs text-slate-500">
-                              {job.failedReason || "No failure reason recorded"}
+                              {job.failedReason || t("No failure reason recorded")}
                             </p>
                           </div>
                           <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
-                            {formatCount(job.attemptsMade)} tries
+                            {formatCount(job.attemptsMade)} {t("tries")}
                           </span>
                         </div>
                         <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Failed {formatDateTime(job.finishedOn || job.timestamp)}
+                          {t("Failed")} {formatDateTime(job.finishedOn || job.timestamp)}
                         </p>
                       </div>
                     ))

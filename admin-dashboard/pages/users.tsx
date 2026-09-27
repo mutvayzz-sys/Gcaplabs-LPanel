@@ -6,6 +6,7 @@ import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
 import { fetchWithAuth } from "../lib/api";
 import { formatCount, formatDate } from "../lib/format";
+import { useI18n } from "../lib/i18n";
 
 function matchesUser(user, search) {
   if (!search) return true;
@@ -17,49 +18,52 @@ function matchesUser(user, search) {
   );
 }
 
-function formatPlanLabel(plan) {
+function formatPlanLabel(plan, t) {
   const normalized = String(plan || "free")
     .trim()
     .toLowerCase();
-  if (normalized === "selfhosted") return "Self-hosted";
-  if (!normalized) return "Free";
+  if (normalized === "selfhosted") return t("Self-hosted");
+  if (!normalized || normalized === "free") return t("Free");
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-function formatAgentCap(user) {
-  if (user?.is_unlimited) return "Unlimited";
+function formatAgentCap(user, t) {
+  if (user?.is_unlimited) return t("Unlimited");
   if (Number.isInteger(user?.agent_limit)) return formatCount(user.agent_limit);
   return "—";
 }
 
-function formatAgentCapSource(source) {
+function formatAgentCapSource(source, t) {
   switch (source) {
     case "admin_override":
-      return "Admin override";
+      return t("Admin override");
     case "admin_default_unlimited":
-      return "Admin default";
+      return t("Admin default");
     case "default":
     default:
-      return "Default user cap";
+      return t("Default user cap");
   }
 }
 
-function formatDefaultAgentCap(user) {
-  if (user?.role === "admin") return "Unlimited";
+function formatDefaultAgentCap(user, t) {
+  if (user?.role === "admin") return t("Unlimited");
   if (Number.isInteger(user?.base_agent_limit)) {
     return formatCount(user.base_agent_limit);
   }
   return "—";
 }
 
-function describeDefaultAgentCap(user) {
+function describeDefaultAgentCap(user, t) {
   if (user?.role === "admin") {
-    return "Leave blank to restore the admin default of unlimited.";
+    return t("Leave blank to restore the admin default of unlimited.");
   }
   if (Number.isInteger(user?.base_agent_limit)) {
-    return `Leave blank to use the default cap of ${formatCount(user.base_agent_limit)}.`;
+    return t("Leave blank to use the default cap of {count}.").replace(
+      "{count}",
+      formatCount(user.base_agent_limit),
+    );
   }
-  return "Leave blank to use the default cap.";
+  return t("Leave blank to use the default cap.");
 }
 
 function buildLimitDrafts(users = []) {
@@ -95,15 +99,16 @@ function buildBackupDrafts(users = []) {
   );
 }
 
-function formatBackupCap(user) {
-  if (!user?.managed_backups_enabled) return "Disabled";
-  const count = user?.backup_limit_per_agent == null ? "Unlimited" : user.backup_limit_per_agent;
-  const storage = user?.backup_storage_mb == null ? "unlimited" : `${user.backup_storage_mb} MB`;
+function formatBackupCap(user, t) {
+  if (!user?.managed_backups_enabled) return t("Disabled");
+  const count = user?.backup_limit_per_agent == null ? t("Unlimited") : user.backup_limit_per_agent;
+  const storage = user?.backup_storage_mb == null ? t("unlimited") : `${user.backup_storage_mb} MB`;
   const retention = user?.backup_retention_days || 0;
-  return `${count} per agent · ${storage} · ${retention}d`;
+  return `${count} ${t("per agent")} · ${storage} · ${t("{count}d").replace("{count}", String(retention))}`;
 }
 
 export default function UsersPage() {
+  const { t } = useI18n();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -121,7 +126,7 @@ export default function UsersPage() {
     try {
       const response = await fetchWithAuth("/api/admin/users");
       if (!response.ok) {
-        throw new Error("Failed to load users");
+        throw new Error(t("Failed to load users"));
       }
 
       const data = await response.json();
@@ -131,11 +136,11 @@ export default function UsersPage() {
       setBackupDrafts(buildBackupDrafts(rows));
     } catch (error) {
       console.error("Failed to load admin users:", error);
-      toast.error(error.message || "Failed to load users");
+      toast.error(error.message || t("Failed to load users"));
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [t, toast]);
 
   useEffect(() => {
     loadUsers();
@@ -152,16 +157,16 @@ export default function UsersPage() {
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.error || "Failed to update role");
+        throw new Error(payload.error || t("Failed to update role"));
       }
 
       setUsers((current) =>
         current.map((user) => (user.id === userId ? { ...user, role: payload.role } : user)),
       );
-      toast.success("Role updated");
+      toast.success(t("Role updated"));
     } catch (error) {
       console.error("Failed to update admin role:", error);
-      toast.error(error.message || "Failed to update role");
+      toast.error(error.message || t("Failed to update role"));
       loadUsers();
     } finally {
       setRoleLoadingId("");
@@ -171,7 +176,12 @@ export default function UsersPage() {
   async function deleteUser(user) {
     const label = user.email || user.id;
     if (
-      !window.confirm(`Delete ${label}? This will remove the account and clean up owned agents.`)
+      !window.confirm(
+        t("Delete {user}? This will remove the account and clean up owned agents.").replace(
+          "{user}",
+          label,
+        ),
+      )
     ) {
       return;
     }
@@ -183,7 +193,7 @@ export default function UsersPage() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.error || "Failed to delete user");
+        throw new Error(payload.error || t("Failed to delete user"));
       }
 
       setUsers((current) => current.filter((entry) => entry.id !== user.id));
@@ -197,10 +207,10 @@ export default function UsersPage() {
         delete next[user.id];
         return next;
       });
-      toast.success("User deleted");
+      toast.success(t("User deleted"));
     } catch (error) {
       console.error("Failed to delete admin user:", error);
-      toast.error(error.message || "Failed to delete user");
+      toast.error(error.message || t("Failed to delete user"));
     } finally {
       setDeleteLoadingId("");
     }
@@ -216,7 +226,7 @@ export default function UsersPage() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.error || "Failed to update agent cap");
+        throw new Error(payload.error || t("Failed to update agent cap"));
       }
 
       setUsers((current) => current.map((entry) => (entry.id === user.id ? payload : entry)));
@@ -224,10 +234,12 @@ export default function UsersPage() {
         ...current,
         [user.id]: payload.agent_limit_override == null ? "" : String(payload.agent_limit_override),
       }));
-      toast.success(nextOverride == null ? "Agent cap override cleared" : "Agent cap updated");
+      toast.success(
+        nextOverride == null ? t("Agent cap override cleared") : t("Agent cap updated"),
+      );
     } catch (error) {
       console.error("Failed to update agent cap:", error);
-      toast.error(error.message || "Failed to update agent cap");
+      toast.error(error.message || t("Failed to update agent cap"));
       loadUsers();
     } finally {
       setLimitLoadingId("");
@@ -237,13 +249,13 @@ export default function UsersPage() {
   async function saveAgentLimit(user) {
     const rawValue = String(limitDrafts[user.id] || "").trim();
     if (!rawValue) {
-      toast.error("Enter an agent cap or clear the override");
+      toast.error(t("Enter an agent cap or clear the override"));
       return;
     }
 
     const nextOverride = Number(rawValue);
     if (!Number.isSafeInteger(nextOverride) || nextOverride < 0) {
-      toast.error("Agent cap must be a whole number that is 0 or greater");
+      toast.error(t("Agent cap must be a whole number that is 0 or greater"));
       return;
     }
 
@@ -259,7 +271,7 @@ export default function UsersPage() {
     if (!raw) return null;
     const parsed = Number(raw);
     if (!Number.isSafeInteger(parsed) || parsed < 0) {
-      throw new Error("Backup limits must be whole numbers that are 0 or greater");
+      throw new Error(t("Backup limits must be whole numbers that are 0 or greater"));
     }
     return parsed;
   }
@@ -279,12 +291,12 @@ export default function UsersPage() {
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Failed to update backup limits");
+      if (!response.ok) throw new Error(payload.error || t("Failed to update backup limits"));
       setUsers((current) => current.map((entry) => (entry.id === user.id ? payload : entry)));
       setBackupDrafts((current) => ({ ...current, ...buildBackupDrafts([payload]) }));
-      toast.success("Backup limits updated");
+      toast.success(t("Backup limits updated"));
     } catch (error) {
-      toast.error(error.message || "Failed to update backup limits");
+      toast.error(error.message || t("Failed to update backup limits"));
       loadUsers();
     } finally {
       setBackupLoadingId("");
@@ -305,14 +317,15 @@ export default function UsersPage() {
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-red-500">
-              User Admin
+              {t("User Admin")}
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
-              Accounts and roles
+              {t("Accounts and roles")}
             </h1>
             <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
-              Search the user base, adjust admin privileges, and cleanly remove accounts that own
-              agent infrastructure.
+              {t(
+                "Search the user base, adjust admin privileges, and cleanly remove accounts that own agent infrastructure.",
+              )}
             </p>
           </div>
 
@@ -324,38 +337,38 @@ export default function UsersPage() {
             className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md"
           >
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Refresh
+            {t("Refresh")}
           </button>
         </header>
 
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" data-no-translate>
           <MetricCard
-            label="Total Users"
+            label={t("Total Users")}
             value={formatCount(users.length)}
             icon={Users}
             tone="blue"
-            caption="All registered accounts"
+            caption={t("All registered accounts")}
           />
           <MetricCard
-            label="Admins"
+            label={t("Admins")}
             value={formatCount(adminCount)}
             icon={Shield}
             tone="red"
-            caption="Full-admin staff accounts"
+            caption={t("Full-admin staff accounts")}
           />
           <MetricCard
-            label="Standard Users"
+            label={t("Standard Users")}
             value={formatCount(users.length - adminCount)}
             icon={Users}
             tone="emerald"
-            caption="Non-admin customer accounts"
+            caption={t("Non-admin customer accounts")}
           />
           <MetricCard
-            label="Owned Agents"
+            label={t("Owned Agents")}
             value={formatCount(totalAgentCount)}
             icon={RefreshCw}
             tone="purple"
-            caption="Agents attached to user accounts"
+            caption={t("Agents attached to user accounts")}
           />
         </div>
 
@@ -369,7 +382,7 @@ export default function UsersPage() {
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by email, name, or user id"
+                placeholder={t("Search by email, name, or user id")}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition-colors focus:border-red-200 focus:bg-white"
               />
             </div>
@@ -379,9 +392,9 @@ export default function UsersPage() {
               onChange={(event) => setRoleFilter(event.target.value)}
               className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition-colors focus:border-red-200 focus:bg-white"
             >
-              <option value="all">All roles</option>
-              <option value="admin">Admins</option>
-              <option value="user">Users</option>
+              <option value="all">{t("All roles")}</option>
+              <option value="admin">{t("Admins")}</option>
+              <option value="user">{t("Users")}</option>
             </select>
           </div>
 
@@ -392,32 +405,32 @@ export default function UsersPage() {
               </div>
             ) : filteredUsers.length === 0 ? (
               <div className="flex h-48 items-center justify-center rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-400">
-                No users match the current filters.
+                {t("No users match the current filters.")}
               </div>
             ) : (
               <table className="min-w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-100">
                     <th className="px-2 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      User
+                      {t("User")}
                     </th>
                     <th className="px-2 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Role
+                      {t("Role")}
                     </th>
                     <th className="px-2 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Agents
+                      {t("Agents")}
                     </th>
                     <th className="px-2 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Agent Cap
+                      {t("Agent Cap")}
                     </th>
                     <th className="px-2 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Backups
+                      {t("Backups")}
                     </th>
                     <th className="px-2 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Created
+                      {t("Created")}
                     </th>
                     <th className="px-2 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Actions
+                      {t("Actions")}
                     </th>
                   </tr>
                 </thead>
@@ -457,13 +470,13 @@ export default function UsersPage() {
                               onChange={(event) => changeRole(user.id, event.target.value)}
                               className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition-colors focus:border-red-200 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              <option value="user">user</option>
-                              <option value="admin">admin</option>
+                              <option value="user">{t("user")}</option>
+                              <option value="admin">{t("admin")}</option>
                             </select>
                           </div>
                           {isLastAdmin ? (
                             <p className="mt-2 text-[11px] font-semibold text-orange-600">
-                              Last admin cannot be demoted.
+                              {t("Last admin cannot be demoted.")}
                             </p>
                           ) : null}
                         </td>
@@ -472,18 +485,18 @@ export default function UsersPage() {
                             {formatCount(user.agentCount)}
                           </span>
                         </td>
-                        <td className="px-2 py-4">
+                        <td className="px-2 py-4" data-no-translate>
                           <div className="min-w-[16rem]">
                             <p className="text-sm font-semibold text-slate-950">
-                              {formatAgentCap(user)}
+                              {formatAgentCap(user, t)}
                             </p>
                             <p className="mt-1 text-[11px] font-semibold text-slate-400">
-                              {formatAgentCapSource(user.agent_limit_source)} ·{" "}
-                              {formatPlanLabel(user.plan)}
+                              {formatAgentCapSource(user.agent_limit_source, t)} ·{" "}
+                              {formatPlanLabel(user.plan, t)}
                             </p>
                             {user.agent_limit_source === "admin_override" ? (
                               <p className="mt-1 text-[11px] font-medium text-slate-500">
-                                Default cap: {formatDefaultAgentCap(user)}
+                                {t("Default cap:")} {formatDefaultAgentCap(user, t)}
                               </p>
                             ) : null}
 
@@ -500,7 +513,7 @@ export default function UsersPage() {
                                   }))
                                 }
                                 placeholder={
-                                  user.role === "admin" ? "Unlimited default" : "Use default"
+                                  user.role === "admin" ? t("Unlimited default") : t("Use default")
                                 }
                                 className="w-28 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition-colors focus:border-red-200 focus:bg-white"
                               />
@@ -512,7 +525,7 @@ export default function UsersPage() {
                                 {limitLoadingId === user.id ? (
                                   <Loader2 size={14} className="animate-spin" />
                                 ) : (
-                                  "Save"
+                                  t("Save")
                                 )}
                               </button>
                               {user.agent_limit_override != null ? (
@@ -521,25 +534,28 @@ export default function UsersPage() {
                                   onClick={() => clearAgentLimit(user)}
                                   className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  Clear
+                                  {t("Clear")}
                                 </button>
                               ) : null}
                             </div>
 
-                            <p className="mt-2 text-[11px] font-medium text-slate-500">
-                              {describeDefaultAgentCap(user)}
+                            <p
+                              className="mt-2 text-[11px] font-medium text-slate-500"
+                              data-no-translate
+                            >
+                              {describeDefaultAgentCap(user, t)}
                             </p>
                           </div>
                         </td>
                         <td className="px-2 py-4">
                           <div className="min-w-[18rem]">
-                            <p className="text-sm font-semibold text-slate-950">
-                              {formatBackupCap(user)}
+                            <p className="text-sm font-semibold text-slate-950" data-no-translate>
+                              {formatBackupCap(user, t)}
                             </p>
                             <p className="mt-1 text-[11px] font-semibold text-slate-400">
                               {user.managed_backups_source === "admin_override"
-                                ? "Admin override"
-                                : "Plan/default"}
+                                ? t("Admin override")
+                                : t("Plan/default")}
                             </p>
                             <div className="mt-3 grid grid-cols-2 gap-2">
                               <select
@@ -555,14 +571,14 @@ export default function UsersPage() {
                                 }
                                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 outline-none"
                               >
-                                <option value="">Plan default</option>
-                                <option value="true">Enabled</option>
-                                <option value="false">Disabled</option>
+                                <option value="">{t("Plan default")}</option>
+                                <option value="true">{t("Enabled")}</option>
+                                <option value="false">{t("Disabled")}</option>
                               </select>
                               <input
                                 type="number"
                                 min="0"
-                                placeholder="Count"
+                                placeholder={t("Count")}
                                 value={backupDraft.count ?? ""}
                                 onChange={(event) =>
                                   setBackupDrafts((current) => ({
@@ -578,7 +594,7 @@ export default function UsersPage() {
                               <input
                                 type="number"
                                 min="0"
-                                placeholder="Storage MB"
+                                placeholder={t("Storage MB")}
                                 value={backupDraft.storage ?? ""}
                                 onChange={(event) =>
                                   setBackupDrafts((current) => ({
@@ -594,7 +610,7 @@ export default function UsersPage() {
                               <input
                                 type="number"
                                 min="0"
-                                placeholder="Retention days"
+                                placeholder={t("Retention days")}
                                 value={backupDraft.retention ?? ""}
                                 onChange={(event) =>
                                   setBackupDrafts((current) => ({
@@ -616,7 +632,7 @@ export default function UsersPage() {
                               {backupLoadingId === user.id ? (
                                 <Loader2 size={14} className="animate-spin" />
                               ) : (
-                                "Save backups"
+                                t("Save backups")
                               )}
                             </button>
                           </div>
@@ -635,7 +651,7 @@ export default function UsersPage() {
                             ) : (
                               <Trash2 size={15} />
                             )}
-                            Delete
+                            {t("Delete")}
                           </button>
                         </td>
                       </tr>

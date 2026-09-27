@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import {
   LayoutDashboard,
+  ShieldCheck,
   Bot,
   Rocket,
   BarChart3,
@@ -30,6 +32,8 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   href: string;
   selfHostedOnly?: boolean;
+  /** Shown only to platform administrators; navigates within the same origin. */
+  adminOnly?: boolean;
 };
 
 const REPO_URL = "https://github.com/solomon2773/nora";
@@ -48,6 +52,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Workspaces", icon: FolderOpen, href: "/app/workspaces" },
   { name: "Monitoring", icon: BarChart3, href: "/app/monitoring" },
   { name: "Logs", icon: ScrollText, href: "/app/logs" },
+  { name: "Platform administration", icon: ShieldCheck, href: "/admin/", adminOnly: true },
 ];
 
 export default function Sidebar({
@@ -58,8 +63,25 @@ export default function Sidebar({
 }: SidebarProps) {
   const router = useRouter();
   const { localizePath, t } = useI18n();
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((user) => {
+        if (active && user?.role === "admin") setIsPlatformAdmin(true);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const navItems = NAV_ITEMS.filter(
-    (item) => !item.selfHostedOnly || platformMode === "selfhosted",
+    (item) =>
+      (!item.selfHostedOnly || platformMode === "selfhosted") &&
+      (!item.adminOnly || isPlatformAdmin),
   );
 
   const isActive = (path) => {
@@ -71,7 +93,7 @@ export default function Sidebar({
     <aside
       aria-label={t("Primary navigation")}
       className={clsx(
-        "bg-brand-ink text-brand-foreground flex flex-col border-r border-brand-cyan/10 shadow-2xl z-50 overflow-y-auto transition-all duration-300",
+        "bg-brand-ink text-brand-foreground hm-admin-sidebar flex flex-col border-r border-brand-cyan/10 shadow-2xl z-50 overflow-y-auto transition-all duration-300",
         collapsed ? "w-[68px]" : "w-64",
       )}
     >
@@ -82,19 +104,13 @@ export default function Sidebar({
           collapsed ? "p-4 justify-center" : "p-6 pb-8",
         )}
       >
-        <img
-          src="/app/logo-mark.png"
-          alt="Nora"
-          width={40}
-          height={40}
-          className="w-10 h-10 shrink-0"
-        />
+        <span aria-hidden="true" className="hm-brand-mark">
+          h
+        </span>
         {!collapsed && (
-          <div className="flex flex-col min-w-0">
-            <span className="text-xl font-bold tracking-tight leading-none text-brand-foreground">
-              Nora
-            </span>
-            <span className="mt-1 text-[10px] font-black uppercase tracking-widest text-brand-cyan/70">
+          <div className="hm-brand flex flex-col min-w-0">
+            <span className="hm-brand-name">headmaster</span>
+            <span className="hm-brand-caption">
               {t("Deploy intelligence anywhere.")}
             </span>
           </div>
@@ -168,6 +184,17 @@ export default function Sidebar({
           collapsed ? "p-2" : "p-4",
         )}
       >
+        {!collapsed && (
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="hm-attribution"
+            title={t("Powered by Nora")}
+          >
+            {t("Powered by Nora")}
+          </a>
+        )}
         <a
           href={REPO_URL}
           target="_blank"

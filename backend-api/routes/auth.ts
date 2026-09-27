@@ -13,6 +13,7 @@ const {
   parseRequiredLocale,
   resolvePreferredLocale,
 } = require("../platformSettings");
+const headmasterLaunch = require("../headmasterLaunch");
 
 const router = express.Router();
 const FIRST_USER_ADMIN_LOCK_KEY = 20260408;
@@ -765,6 +766,46 @@ router.post("/session-upgrade", (req, res) => {
 router.post("/logout", (req, res) => {
   clearAuthCookie(res, req);
   res.json({ success: true });
+});
+
+// ── Headmaster admin launch (browser-facing half) ───────────────────────────
+// The server-to-server half lives in routes/headmaster.ts. These endpoints
+// only ever mint a browser-binding cookie or redeem a single-use code into a
+// real Nora session for an explicitly linked existing administrator; they
+// never accept credentials from the parent page.
+
+// POST /auth/headmaster/initiate — plant the short-lived browser-binding
+// cookie and return its nonce. The nonce travels to the Headmaster server so
+// the issued launch code is bound to exactly this browser (login-CSRF and
+// session-swap defense).
+router.post("/headmaster/initiate", authLimiter, async (req, res) => {
+  if (!headmasterLaunch.isEnabled()) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  const browserNonce = require("crypto").randomBytes(32).toString("hex");
+  headmasterLaunch.setLaunchBrowserCookie(res, browserNonce);
+  res.json({ browserNonce });
+});
+
+// POST /auth/headmaster/redeem — consume the single-use launch code carried by
+// the embedded shell and establish the Nora session for the linked admin.
+router.post("/headmaster/redeem", authLimiter, async (req, res, next) => {
+  try {
+    if (!headmasterLaunch.isEnabled()) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    const identity = await headmasterLaunch.consumeLaunchCode({
+      code: req.body?.code,
+      browserNonceCookie: headmasterLaunch.readLaunchBrowserCookie(req),
+    });
+    await headmasterLaunch.issueHeadmasterSession(res, req, identity);
+    res.json({ success: true, role: "admin" });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    next(error);
+  }
 });
 
 module.exports = router;

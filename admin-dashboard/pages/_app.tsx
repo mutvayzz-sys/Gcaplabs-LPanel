@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { ToastProvider } from "../components/Toast";
 import { I18nProvider, useI18n } from "../lib/i18n";
+import { startHeadmasterBridge } from "../lib/headmaster";
 
 function AdminAccessGate({ children }) {
   const { dashboardPath, loginPath, t } = useI18n();
@@ -89,13 +90,26 @@ function AdminAccessGate({ children }) {
 }
 
 function MyApp({ Component, pageProps }) {
+  useEffect(() => {
+    // Presentation/readiness + launch bridge. No-op unless the app is framed
+    // by the configured build-time Headmaster parent origin.
+    return startHeadmasterBridge({ view: "platform-administration" });
+  }, []);
+
+  // The Headmaster launch staging page must be reachable without an existing
+  // session — the gate would bounce it (and the whole launch exchange) to the
+  // marketing login before the bridge could answer.
+  const content = Component.isHeadmasterLaunchPage ? (
+    <Component {...pageProps} />
+  ) : (
+    <AdminAccessGate>
+      <Component {...pageProps} />
+    </AdminAccessGate>
+  );
+
   return (
     <I18nProvider>
-      <ToastProvider>
-        <AdminAccessGate>
-          <Component {...pageProps} />
-        </AdminAccessGate>
-      </ToastProvider>
+      <ToastProvider>{content}</ToastProvider>
     </I18nProvider>
   );
 }

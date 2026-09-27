@@ -1284,6 +1284,14 @@ app.use(gatewayUIAssetProxy);
 // ─── Public Agent Hub Catalog ─────────────────────────────────────
 app.use("/agent-hub", require("./routes/agentHubPublic"));
 
+// ─── Headmaster S2S launch exchange ───────────────────────────────
+// Bearer-token server-to-server surface for the Headmaster site. Reachable
+// publicly as /api/internal/headmaster/* through the reverse proxy's existing
+// /api/ location (prefix is stripped on pass-through); browsers never call it
+// and it 404s entirely unless HEADMASTER_S2S_TOKEN and
+// HEADMASTER_PARENT_ORIGIN are configured.
+app.use("/internal/headmaster", require("./routes/headmaster"));
+
 // ─── Auth Wall ────────────────────────────────────────────────────
 app.use(authenticateToken);
 
@@ -2606,6 +2614,12 @@ if (require.main === module) {
 
     const server = app.listen(PORT, async () => {
       console.log(`api running on ${PORT}`);
+
+      // Headmaster launch exchange: schema, revocation pub/sub, and the
+      // bounded-delay session revalidator. No-op unless configured.
+      require("./headmasterLaunch").init().catch((e) => {
+        console.error("headmaster launch init failed:", e.message);
+      });
 
       // Dev-mode only: persist the generated JWT secret in platform_settings so
       // sessions survive restarts; on later boots restore the stored one. The

@@ -4,6 +4,28 @@ All notable changes to Nora are documented here. Each entry summarizes the
 corresponding [GitHub release](https://github.com/solomon2773/nora/releases),
 which carries the full notes and verification details.
 
+## [v1.22.0](https://github.com/solomon2773/nora/releases/tag/v1.22.0) — 2026-09-16
+
+Admin localization and dependency refresh release. The remaining top-level admin dashboard
+pages — Overview, Audit, and Users — are now fully localized, and the dependency baseline
+moves forward across all workspaces.
+
+### Added
+
+- **Admin Overview, Audit, and Users pages are localized** into Spanish, French, Simplified and
+  Traditional Chinese. All visible copy routes through the shared `useI18n().t()` dictionary with
+  placeholder-based sentence templates, and React-rendered copy that mixes translations with
+  dynamic backend values is shielded from the static DOM localizer so switching languages can no
+  longer overwrite live metrics, pagination, or limit summaries. Closes #255, #248, and #253.
+  Contributed by @Amidwestnoob.
+
+### Changed
+
+- **Dependency refresh across all workspaces:** React 19.3, Next.js 16.3.4, Jest 30.5,
+  Playwright 1.63, OpenTelemetry SDK 2.11 / exporters 0.222, bullmq 6.3.4, js-yaml 4.3.2,
+  nodemailer 9.1.1, hono 4.13.7, and vitest 5 (agent-runtime dev suite), plus the CodeQL actions
+  at v4.38.0.
+
 ## [v1.21.0](https://github.com/solomon2773/nora/releases/tag/v1.21.0) — 2026-09-07
 
 Domain migration release. The hosted platform moves from `nora.solomontsao.com` to

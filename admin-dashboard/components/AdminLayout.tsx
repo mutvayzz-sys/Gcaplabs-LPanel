@@ -111,23 +111,15 @@ export default function AdminLayout({ children }) {
   return (
     <div className="min-h-screen bg-[#eef4fb] text-brand-ink">
       <div className="flex min-h-screen flex-col md:flex-row">
-        <aside className="w-full bg-brand-ink text-brand-foreground md:min-h-screen md:w-72">
+        <aside className="w-full bg-brand-ink text-brand-foreground hm-admin-sidebar md:min-h-screen md:w-72">
           <div className="border-b border-brand-cyan/10 px-5 py-5 sm:px-6">
-            <div className="flex items-center gap-3">
-              <img
-                src="/admin/logo-mark.png"
-                alt="Nora"
-                width={44}
-                height={44}
-                className="h-11 w-11"
-              />
+            <div className="hm-brand flex items-center gap-3">
+              <span aria-hidden="true" className="hm-brand-mark">
+                h
+              </span>
               <div>
-                <p className="text-lg font-black tracking-tight text-brand-foreground">
-                  {t("Nora Admin")}
-                </p>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-cyan/65">
-                  {t("Full platform control")}
-                </p>
+                <p className="hm-brand-name">headmaster</p>
+                <p className="hm-brand-caption">{t("Full platform control")}</p>
               </div>
             </div>
           </div>
@@ -142,7 +134,7 @@ export default function AdminLayout({ children }) {
                   className={clsx(
                     "inline-flex items-center gap-3 whitespace-nowrap rounded-2xl px-4 py-3 text-sm font-semibold transition-all",
                     active
-                      ? "bg-red-600 text-white shadow-lg shadow-red-600/20"
+                      ? "hm-admin-active"
                       : "text-brand-foreground/64 hover:bg-brand-cyan/10 hover:text-brand-foreground",
                   )}
                 >
@@ -167,6 +159,21 @@ export default function AdminLayout({ children }) {
           </div>
 
           <div className="border-t border-brand-cyan/10 p-3 md:mt-auto md:p-4">
+            <a
+              href="/app/dashboard"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-cyan/12 px-4 py-3 text-sm font-semibold text-brand-foreground/72 transition-colors hover:bg-brand-cyan/10 hover:text-brand-foreground"
+            >
+              {t("Runtime operations")}
+            </a>
+            <a
+              href="https://github.com/solomon2773/nora"
+              target="_blank"
+              rel="noreferrer"
+              className="hm-attribution mb-3 block"
+              title={t("Powered by Nora")}
+            >
+              {t("Powered by Nora")}
+            </a>
             <LanguageSwitcher className="mb-3 w-full justify-center" />
             <button
               onClick={handleLogout}

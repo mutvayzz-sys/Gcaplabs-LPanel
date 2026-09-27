@@ -73,6 +73,7 @@ const {
 } = require("../platformSettings");
 const mailer = require("../mailer");
 const { resolveAuditSource } = require("../auditSource");
+const headmasterLaunch = require("../headmasterLaunch");
 const { isProviderAuthStatusHoldReason, resumeAgentWithProviderAuth } = require("../authSync");
 const {
   acquireAgentProvisionLock,
@@ -1553,6 +1554,14 @@ router.put(
       "UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, role",
       [role, req.params.id],
     );
+    // A demotion must immediately end any Headmaster-launched privileged
+    // session for this user, including live WebSockets.
+    if (role !== "admin") {
+      await headmasterLaunch.revokeHeadmasterSessionsBestEffort({
+        noraUserId: req.params.id,
+        reason: "nora_role_demoted",
+      });
+    }
     await monitoring.logEvent(
       "admin_user_role_changed",
       `Admin changed ${user.email} role from ${user.role} to ${role}`,
@@ -1767,6 +1776,12 @@ router.delete(
     await ensureNotLastAdmin(user);
     await ensureOwnedRemoteHostsAreUnused(user.id);
     const deletedAgents = await destroyUserAgents(user.id);
+    // End any Headmaster-launched privileged session before the account row
+    // disappears (also cascades the identity link via FK).
+    await headmasterLaunch.revokeHeadmasterSessionsBestEffort({
+      noraUserId: user.id,
+      reason: "nora_user_deleted",
+    });
     await db.query("DELETE FROM users WHERE id = $1", [user.id]);
     await monitoring.logEvent(
       "admin_user_deleted",

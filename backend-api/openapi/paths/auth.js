@@ -175,4 +175,25 @@ module.exports = {
       responses: ok("Result"),
     },
   },
+  "/auth/headmaster/initiate": {
+    post: {
+      tags: ["Auth"],
+      summary: "Plant the browser-binding cookie for a Headmaster admin launch",
+      security: [],
+      responses: ok("Browser nonce"),
+    },
+  },
+  "/auth/headmaster/redeem": {
+    post: {
+      tags: ["Auth"],
+      summary: "Redeem a single-use Headmaster launch code for a linked admin session",
+      security: [],
+      responses: {
+        ...ok("Redemption result"),
+        403: signupDisabledResponse(
+          "The launch code is invalid, expired, already used, bound to another browser, or the linked account is no longer an approved administrator.",
+        ),
+      },
+    },
+  },
 };

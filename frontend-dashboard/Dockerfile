@@ -5,6 +5,12 @@ RUN npm ci || npm install
 
 FROM node:24-alpine AS builder
 WORKDIR /app
+# Build-time embedding policy: exact HTTPS origin of the Headmaster admin host,
+# or empty for same-origin-only framing. NEXT_PUBLIC_* is inlined by the
+# Next.js production build, so it must be present here — a runtime env value
+# alone does not affect the compiled bundle.
+ARG NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN=""
+ENV NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN=$NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN
 COPY tsconfig.base.json /tsconfig.base.json
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend-dashboard/ ./
