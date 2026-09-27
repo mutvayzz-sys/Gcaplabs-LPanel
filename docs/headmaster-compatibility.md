@@ -43,6 +43,17 @@ The production images observed on 2026-09-23, before any N0 release, are recorde
 
 ## Open evidence
 
+### Memory gateway first-start contract (27 September 2026)
+
+`POST /agents/deploy` accepts matching `external_identity` and
+`headmaster_integration_config` together for the Headmaster runtime family.
+It validates and persists both in the agent INSERT before queueing provisioning.
+Partial, mismatched, or non-private gateway configuration is rejected. The worker
+passes the four server-managed `HEADMASTER_*` fields to the Docker adapter, which
+includes only those nonsecret fields in the container environment. Provider
+credentials remain in managed secret storage. This supplies the memory bootstrap
+with immutable metadata on its first start, before a later integration PATCH.
+
 - The provenance of the original incident comments from 2026-09-19 could not be independently reproduced from the available source/log evidence; keep those claims unverified until reproduced.
 - Disposable-agent provision/use/stop/restart/remove acceptance, including neighbor and volume preservation, remains outstanding.
 - Candidate API/worker builds from one committed revision, OCI source-revision labels, actual candidate digests, and full manifest provenance remain outstanding.

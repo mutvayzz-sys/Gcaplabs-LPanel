@@ -266,6 +266,13 @@ class HermesBackend extends DockerBackend {
       GATEWAY_HEALTH_URL: `http://127.0.0.1:${HERMES_RUNTIME_PORT}`,
       MESSAGING_CWD: HERMES_WORKSPACE,
       TERMINAL_CWD: HERMES_WORKSPACE,
+      // s6 initialization runs before the managed .env is sourced. Only
+      // server-owned, nonsecret memory identity belongs in the Docker env.
+      ...Object.fromEntries(
+        ["HEADMASTER_OWNER_ID", "HEADMASTER_WORKSPACE_ID", "HEADMASTER_MEMORY_BANK_ID", "HEADMASTER_MEMORY_GATEWAY_URL"]
+          .filter((key) => typeof env?.[key] === "string" && env[key])
+          .map((key) => [key, env[key]]),
+      ),
     }).map(([key, value]) => `${key}=${value}`);
 
     const composeNetwork = await this._findComposeNetwork();

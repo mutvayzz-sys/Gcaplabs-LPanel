@@ -71,6 +71,23 @@ function validateConfig(body) {
   return [owner_uuid, workspace_uuid, memory_bank_id, memory_gateway_url];
 }
 
+// Persist identity and nonsecret bootstrap metadata before the worker can
+// start an image whose initialization requires it. Credentials stay in the
+// existing managed-environment reconciliation path.
+function deploymentConfig(body, runtimeFamily) {
+  const identity = body.external_identity;
+  const config = body.headmaster_integration_config;
+  if (!identity && !config) return null;
+  if (runtimeFamily !== "hermes" || identity?.namespace !== "headmaster" || !config)
+    throw configError("Complete Headmaster deployment identity and memory metadata are required");
+  const values = validateConfig({ ...config, expected_revision: 0 });
+  if (identity.external_id !== values[1] || identity.owner_uuid !== values[0])
+    throw configError("Headmaster deployment identity and memory metadata must match");
+  if (values[3] !== "http://headmaster-memory-gateway:8791")
+    throw configError("Headmaster deployment requires the private memory gateway");
+  return values;
+}
+
 async function updateManagedConfig(agent, body, { retry = false, apiKeyWorkspaceId = null } = {}) {
   const db = require("./db");
   const { withProviderStateLock } = require("./llmProviders");
@@ -166,5 +183,6 @@ module.exports = {
   headmasterEnv,
   managedConfigStatus,
   validateConfig,
+  deploymentConfig,
   updateManagedConfig,
 };
