@@ -112,7 +112,77 @@ const versionSchema = {
   additionalProperties: false,
 };
 
+const managedConfigSchema = {
+  type: "object",
+  required: ["integration_key_names", "desired_revision", "applied_revision", "deployment_status"],
+  properties: {
+    integration_key_names: { type: "array", items: { type: "string" } },
+    desired_revision: { type: "integer" },
+    applied_revision: { type: "integer" },
+    deployment_status: { type: "string", enum: ["unconfigured", "pending", "applied", "failed"] },
+  },
+};
+
 module.exports = {
+  "/agents/{id}/managed-config": {
+    get: {
+      tags: ["Agents"],
+      summary: "Read Headmaster managed config status (names only)",
+      parameters: [agentParam],
+      "x-required-scopes": ["agents:read"],
+      "x-required-agent-role": "viewer",
+      responses: ok("Managed config status", managedConfigSchema),
+    },
+  },
+  "/agents/{id}/managed-config/retry": {
+    post: {
+      tags: ["Agents"],
+      summary: "Retry applying saved Headmaster managed config",
+      parameters: [agentParam],
+      "x-required-scopes": ["agents:write"],
+      "x-required-agent-role": "editor",
+      responses: ok(
+        "Managed config status; runtime failure returns failed with unapplied revision",
+        managedConfigSchema,
+      ),
+    },
+  },
+  "/agents/{id}/integrations/headmaster": {
+    patch: {
+      tags: ["Agents"],
+      summary: "Save and apply Headmaster identity and memory config",
+      description:
+        "Requires an adopted matching identity. Serializes with provider reconciliation. Identical applied requests are no-ops; stale changed requests return 409. Runtime failures return 200 with a failed status and unapplied revision.",
+      parameters: [agentParam],
+      "x-required-scopes": ["agents:write"],
+      "x-required-agent-role": "editor",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: [
+                "expected_revision",
+                "owner_uuid",
+                "workspace_uuid",
+                "memory_bank_id",
+                "memory_gateway_url",
+              ],
+              properties: {
+                expected_revision: { type: "integer", minimum: 0 },
+                owner_uuid: { type: "string", format: "uuid" },
+                workspace_uuid: { type: "string", format: "uuid" },
+                memory_bank_id: { type: "string" },
+                memory_gateway_url: { type: "string", format: "uri" },
+              },
+            },
+          },
+        },
+      },
+      responses: ok("Managed config status", managedConfigSchema),
+    },
+  },
   "/agents": {
     get: {
       tags: ["Agents"],
@@ -301,6 +371,18 @@ const tail = {
       ...summarize("Agents", "Duplicate an agent's configuration", [agentParam], ["agents:write"]),
       description:
         "Workspace API keys may duplicate only when neither the source nor destination uses Remote Docker. Remote Docker source capture or placement requires a session JWT.",
+    },
+  },
+  "/agents/{id}/integrations/headmaster/adopt": {
+    post: {
+      ...summarize(
+        "Agents",
+        "Bind the agent to its immutable external (Headmaster) identity",
+        [agentParam],
+        ["agents:write"],
+      ),
+      description:
+        "Idempotent: re-adopting the identity already bound to the agent is a no-op. Rejects with 409 if the agent is already bound to a different external identity.",
     },
   },
   "/agents/{id}/budget": {
