@@ -2041,7 +2041,7 @@ class K8sBackend extends ProvisionerBackend {
             },
           },
           spec: {
-            hostname: safeHostname(name || deployName, `hermes-${id}`),
+            hostname: safeHostname(name || deployName, `hm-${id}`),
             securityContext: podSecurityContext(),
             containers: [
               {
