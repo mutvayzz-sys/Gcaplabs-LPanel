@@ -2450,6 +2450,74 @@ router.post("/adopt", async (req, res) => {
   }
 });
 
+const EXTERNAL_IDENTITY_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Bind an agent to its immutable external (Headmaster) identity. Called by
+// the Headmaster hermes-bridge provisioner right after an agent is created
+// or resumed, and again on every retry of that job step — matching the
+// already-bound identity is a no-op, so retries are safe. A request that
+// would rebind the agent to a *different* identity is rejected, since the
+// identity is meant to stay immutable for the agent's lifetime.
+router.post(
+  "/:id/integrations/headmaster/adopt",
+  asyncHandler(async (req, res) => {
+    const agent = await findAccessibleAgentForRequest(req, req.params.id, "editor");
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+    const identity = req.body?.external_identity || {};
+    const namespace = typeof identity.namespace === "string" ? identity.namespace.trim() : "";
+    const externalId =
+      typeof identity.external_id === "string" ? identity.external_id.trim().toLowerCase() : "";
+    const ownerUuid =
+      typeof identity.owner_uuid === "string" ? identity.owner_uuid.trim().toLowerCase() : "";
+    if (!namespace || !externalId || !ownerUuid) {
+      return res.status(400).json({
+        error:
+          "external_identity.namespace, external_identity.external_id, and external_identity.owner_uuid are required",
+      });
+    }
+    if (!EXTERNAL_IDENTITY_UUID_RE.test(externalId) || !EXTERNAL_IDENTITY_UUID_RE.test(ownerUuid)) {
+      return res.status(400).json({
+        error: "external_identity.external_id and external_identity.owner_uuid must be UUIDs",
+      });
+    }
+
+    const alreadyAdopted = agent.external_namespace != null;
+    if (
+      alreadyAdopted &&
+      (agent.external_namespace !== namespace ||
+        agent.external_id !== externalId ||
+        agent.external_owner_uuid !== ownerUuid)
+    ) {
+      const error = new Error("Agent is already bound to a different external identity");
+      error.statusCode = 409;
+      error.code = "external_identity_immutable";
+      throw error;
+    }
+
+    const updated = await db.query(
+      `UPDATE agents
+          SET external_namespace = $1, external_id = $2, external_owner_uuid = $3
+        WHERE id = $4
+        RETURNING *`,
+      [namespace, externalId, ownerUuid, agent.id],
+    );
+
+    if (!alreadyAdopted) {
+      await monitoring.logEvent(
+        "agent_headmaster_identity_adopted",
+        `Agent "${agent.name}" adopted Headmaster identity ${namespace}:${externalId}`,
+        agentAuditMetadata(req, updated.rows[0], {
+          adopt: { namespace, externalId, ownerUuid },
+        }),
+      );
+    }
+
+    res.json({ ...serializeAgent(updated.rows[0]), adopted: true });
+  }),
+);
+
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {

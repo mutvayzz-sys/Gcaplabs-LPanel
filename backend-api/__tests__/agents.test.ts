@@ -5056,6 +5056,173 @@ describe("PATCH /agents/:id", () => {
   });
 });
 
+describe("POST /agents/:id/integrations/headmaster/adopt", () => {
+  const EXTERNAL_ID = "47a0b178-0497-4b83-91f9-92af078310d0";
+  const OWNER_UUID = "f125bb2c-1ce1-4b01-9da5-9b736caf503f";
+
+  it("binds an unadopted agent to its external identity", async () => {
+    const monitoringModule = require("../monitoring");
+    mockDb.query
+      .mockResolvedValueOnce({
+        rows: [{ id: "a-adopt", name: "Hermes-Agent", user_id: "user-1", external_namespace: null }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "a-adopt",
+            name: "Hermes-Agent",
+            user_id: "user-1",
+            external_namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            external_owner_uuid: OWNER_UUID,
+          },
+        ],
+      });
+
+    const res = await auth(
+      request(app)
+        .post("/agents/a-adopt/integrations/headmaster/adopt")
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            owner_uuid: OWNER_UUID,
+          },
+        }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: "a-adopt",
+      adopted: true,
+      external_namespace: "headmaster",
+      external_id: EXTERNAL_ID,
+      external_owner_uuid: OWNER_UUID,
+    });
+    expect(mockDb.query).toHaveBeenNthCalledWith(
+      2,
+      `UPDATE agents
+          SET external_namespace = $1, external_id = $2, external_owner_uuid = $3
+        WHERE id = $4
+        RETURNING *`,
+      ["headmaster", EXTERNAL_ID, OWNER_UUID, "a-adopt"],
+    );
+    expect(monitoringModule.logEvent).toHaveBeenCalledWith(
+      "agent_headmaster_identity_adopted",
+      expect.stringContaining("adopted Headmaster identity"),
+      expect.any(Object),
+    );
+  });
+
+  it("is idempotent on retry: re-adopting the same identity succeeds and does not re-log", async () => {
+    const monitoringModule = require("../monitoring");
+    monitoringModule.logEvent.mockClear();
+    mockDb.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "a-adopt-2",
+            name: "Hermes-Agent",
+            user_id: "user-1",
+            external_namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            external_owner_uuid: OWNER_UUID,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "a-adopt-2",
+            name: "Hermes-Agent",
+            user_id: "user-1",
+            external_namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            external_owner_uuid: OWNER_UUID,
+          },
+        ],
+      });
+
+    const res = await auth(
+      request(app)
+        .post("/agents/a-adopt-2/integrations/headmaster/adopt")
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            owner_uuid: OWNER_UUID,
+          },
+        }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: "a-adopt-2", adopted: true });
+    expect(monitoringModule.logEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects rebinding an agent to a different external identity", async () => {
+    mockDb.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "a-adopt-3",
+          name: "Hermes-Agent",
+          user_id: "user-1",
+          external_namespace: "headmaster",
+          external_id: EXTERNAL_ID,
+          external_owner_uuid: OWNER_UUID,
+        },
+      ],
+    });
+
+    const res = await auth(
+      request(app)
+        .post("/agents/a-adopt-3/integrations/headmaster/adopt")
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: "00000000-0000-0000-0000-000000000000",
+            owner_uuid: OWNER_UUID,
+          },
+        }),
+    );
+
+    expect(res.status).toBe(409);
+    expect(mockDb.query).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a missing or malformed external_identity", async () => {
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ id: "a-adopt-4", name: "Hermes-Agent", user_id: "user-1", external_namespace: null }],
+    });
+
+    const res = await auth(
+      request(app)
+        .post("/agents/a-adopt-4/integrations/headmaster/adopt")
+        .send({ external_identity: { namespace: "headmaster", external_id: "not-a-uuid", owner_uuid: OWNER_UUID } }),
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("404s for an agent the caller cannot access", async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [] });
+
+    const res = await auth(
+      request(app)
+        .post("/agents/not-mine/integrations/headmaster/adopt")
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            owner_uuid: OWNER_UUID,
+          },
+        }),
+    );
+
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("POST /agents/:id/duplicate", () => {
   it.each([
     [

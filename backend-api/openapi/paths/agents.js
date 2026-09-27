@@ -303,6 +303,18 @@ const tail = {
         "Workspace API keys may duplicate only when neither the source nor destination uses Remote Docker. Remote Docker source capture or placement requires a session JWT.",
     },
   },
+  "/agents/{id}/integrations/headmaster/adopt": {
+    post: {
+      ...summarize(
+        "Agents",
+        "Bind the agent to its immutable external (Headmaster) identity",
+        [agentParam],
+        ["agents:write"],
+      ),
+      description:
+        "Idempotent: re-adopting the identity already bound to the agent is a no-op. Rejects with 409 if the agent is already bound to a different external identity.",
+    },
+  },
   "/agents/{id}/budget": {
     get: {
       tags: ["Budgets"],
