@@ -1888,6 +1888,38 @@ describe("provisioning runtime/gateway contracts", () => {
       }),
     );
   });
+
+  it("never leaks the upstream Hermes deploy name into the pod hostname when no agent name is given", async () => {
+    const K8sBackend = require("../../workers/provisioner/backends/k8s");
+    const backend = new K8sBackend(
+      k8sProfile({
+        namespace: "nora-hermes-agents",
+        hermesNamespace: "nora-hermes-agents",
+      }),
+    );
+
+    await backend.create({
+      id: "999888",
+      runtimeFamily: "hermes",
+      env: {},
+    });
+
+    expect(mockCreateNamespacedDeployment).toHaveBeenCalledTimes(1);
+    const deploymentBody = mockCreateNamespacedDeployment.mock.calls[0][0].body;
+    const podHostname = deploymentBody.spec.template.spec.hostname;
+
+    // Earlier fix (#4) only renamed the literal `hermes-${id}` template, not
+    // the `deployName` fallback that ran first and still carried the
+    // upstream `nora-hermes-agent-<id>` deploy-naming template into the pod
+    // hostname whenever `name` was absent.
+    expect(podHostname).toBe("hm-999888");
+    expect(podHostname).not.toMatch(/hermes/i);
+    expect(podHostname).not.toMatch(/nora-hermes-agent/i);
+    // Sanity check: the Deployment's own name is still the (unrelated,
+    // internal) upstream-templated value — only the pod hostname must
+    // avoid it.
+    expect(deploymentBody.metadata.name).toMatch(/^nora-hermes-agent-/);
+  });
 });
 
 describe("Hermes dashboard provisioning", () => {
@@ -2019,6 +2051,51 @@ describe("Hermes dashboard provisioning", () => {
         runtimePort: 8642,
       }),
     );
+  });
+
+  it("never leaks the upstream Hermes container name into the hostname when no agent name is given", async () => {
+    const HermesBackend = require("../../workers/provisioner/backends/hermes");
+    const backend = new HermesBackend();
+    backend.updateEnv = jest.fn().mockResolvedValue(undefined);
+
+    const createdContainer = {
+      id: "hermes-container-2",
+      start: jest.fn().mockResolvedValue({}),
+      inspect: jest.fn().mockResolvedValue({
+        NetworkSettings: { IPAddress: "10.0.0.51", Networks: {} },
+      }),
+      remove: jest.fn().mockResolvedValue({}),
+    };
+    const existingContainer = {
+      inspect: jest.fn().mockRejectedValue(new Error("not found")),
+    };
+
+    backend._findComposeNetwork = jest.fn().mockResolvedValue(null);
+    backend.docker = {
+      getImage: jest.fn().mockReturnValue({ inspect: jest.fn().mockResolvedValue({}) }),
+      getContainer: jest.fn().mockReturnValue(existingContainer),
+      createContainer: jest.fn().mockResolvedValue(createdContainer),
+      createVolume: jest.fn().mockResolvedValue({}),
+      getNetwork: jest.fn().mockReturnValue({ connect: jest.fn().mockResolvedValue({}) }),
+    };
+
+    // No `name` supplied — the earlier `hm-${id}` fallback fix (#4) only
+    // covered the literal template, not the `containerName` fallback that
+    // still ran first and carried the upstream `nora-hermes-agent-<id>`
+    // container-naming template into the hostname.
+    await backend.create({
+      id: "999888",
+      env: {},
+    });
+
+    const config = backend.docker.createContainer.mock.calls[0][0];
+    expect(config.Hostname).toBe("hm-999888");
+    expect(config.Hostname).not.toMatch(/hermes/i);
+    expect(config.Hostname).not.toMatch(/nora-hermes-agent/i);
+    // Sanity check: the container name itself is still the (unrelated,
+    // internal) upstream-templated value — only the externally visible
+    // hostname must avoid it.
+    expect(config.name).toMatch(/^nora-hermes-agent-/);
   });
 });
 

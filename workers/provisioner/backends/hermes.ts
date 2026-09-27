@@ -270,7 +270,12 @@ class HermesBackend extends DockerBackend {
 
     const composeNetwork = await this._findComposeNetwork();
     const networkingConfig = composeNetwork ? { [composeNetwork]: {} } : undefined;
-    const hostname = safeHostname(name || containerName, `hm-${id}`);
+    // Derive the hostname from an explicit agent `name` only. `containerName`
+    // is (or falls back to) an upstream-templated value like
+    // `nora-hermes-<name>-<id>`, so using it here would leak the underlying
+    // Hermes runtime branding whenever `name` is absent. Fall straight
+    // through to the already-sanitized `hm-${id}` literal instead.
+    const hostname = safeHostname(name, `hm-${id}`);
 
     try {
       throwIfAborted(abortSignal, `hermes create for ${containerName}`);
