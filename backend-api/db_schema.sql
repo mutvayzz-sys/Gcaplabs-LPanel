@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS agents (
   disk_gb INTEGER DEFAULT 10,
   paused_reason TEXT,
   mcp_servers JSONB DEFAULT '[]',
+  external_namespace TEXT,
+  external_id TEXT,
+  external_owner_uuid TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

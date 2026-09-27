@@ -2454,6 +2454,12 @@ async function migrateDB(database = db, env = process.env) {
     `ALTER TABLE platform_settings ALTER COLUMN agent_hub_url SET DEFAULT 'https://norafleet.ai'`,
     `UPDATE platform_settings SET agent_hub_url = 'https://norafleet.ai', updated_at = NOW()
        WHERE agent_hub_url = 'https://nora.solomontsao.com'`,
+    // External (Headmaster) identity binding, set by POST
+    // /api/agents/:id/integrations/headmaster/adopt. Immutable once set — the
+    // route rejects a request that would change it on an already-adopted agent.
+    `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_namespace TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_owner_uuid TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
   ];
 
   return runVersionedMigrations(database, migrations, {
