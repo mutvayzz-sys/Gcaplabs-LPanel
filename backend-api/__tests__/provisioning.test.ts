@@ -1962,6 +1962,10 @@ describe("Hermes dashboard provisioning", () => {
       name: "Hermes QA",
       env: {
         OPENAI_API_KEY: "test-key",
+        HEADMASTER_OWNER_ID: "owner-id",
+        HEADMASTER_WORKSPACE_ID: "workspace-id",
+        HEADMASTER_MEMORY_BANK_ID: "bank-id",
+        HEADMASTER_MEMORY_GATEWAY_URL: "http://headmaster-memory-gateway:8791",
       },
     });
 
@@ -1974,12 +1978,17 @@ describe("Hermes dashboard provisioning", () => {
         "HERMES_DISABLE_LAZY_INSTALLS=1",
         "HERMES_NONINTERACTIVE=1",
         "HERMES_DASHBOARD=1",
+        "HEADMASTER_OWNER_ID=owner-id",
+        "HEADMASTER_WORKSPACE_ID=workspace-id",
+        "HEADMASTER_MEMORY_BANK_ID=bank-id",
+        "HEADMASTER_MEMORY_GATEWAY_URL=http://headmaster-memory-gateway:8791",
       ]),
     );
     // Bug #2 (#297): the gateway API key must be baked into the container env so
     // the s6-supervised gateway (which reads /run/s6/container_environment, not
     // the sourced managed-env file) inherits it on every boot, including
     // auth-reconcile restarts. It must match the token returned to the control plane.
+    expect(config.Env).not.toContain("OPENAI_API_KEY=test-key");
     const apiServerKeyEnv = config.Env.find((entry) => entry.startsWith("API_SERVER_KEY="));
     expect(apiServerKeyEnv).toBe(`API_SERVER_KEY=${result.gatewayToken}`);
     // Dashboard basic-auth credential is baked into the container env and must

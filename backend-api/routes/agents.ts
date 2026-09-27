@@ -2243,13 +2243,17 @@ router.post("/deploy", async (req, res) => {
             }),
     );
 
+    const headmaster = require("../headmasterConfig").deploymentConfig(requestBody, runtimeFields.runtime_family);
     const result = await insertAgentForRequest(
       req,
       `INSERT INTO agents(
          user_id, name, status, node, backend_type, sandbox_type, vcpu, ram_mb, disk_gb,
          container_name, image, template_payload, clawhub_skills, hermes_skills, runtime_family,
-         deploy_target, execution_target_id, sandbox_profile
-       ) VALUES($1, $2, 'queued', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17) RETURNING *`,
+         deploy_target, execution_target_id, sandbox_profile,
+         external_namespace, external_id, external_owner_uuid,
+         headmaster_owner_id, headmaster_workspace_id, headmaster_memory_bank_id, headmaster_memory_gateway_url,
+         headmaster_integration_desired_revision, headmaster_integration_deployment_status
+       ) VALUES($1, $2, 'queued', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26) RETURNING *`,
       [
         req.user.id,
         name,
@@ -2268,6 +2272,12 @@ router.post("/deploy", async (req, res) => {
         runtimeFields.deploy_target,
         runtimeFields.execution_target_id,
         runtimeFields.sandbox_profile,
+        headmaster ? "headmaster" : null,
+        headmaster?.[1] ?? null,
+        headmaster?.[0] ?? null,
+        ...(headmaster || [null, null, null, null]),
+        headmaster ? 1 : 0,
+        headmaster ? "pending" : "unconfigured",
       ],
     );
     const agent = result.rows[0];

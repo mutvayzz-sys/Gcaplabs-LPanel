@@ -168,3 +168,15 @@ test("concurrent duplicate requests reconcile once after re-reading under the lo
   expect(mockSync).toHaveBeenCalledTimes(1);
   expect(row.headmaster_integration_desired_revision).toBe(1);
 });
+
+test("deployment metadata is complete, private and bound to the same immutable identity", () => {
+  const { deploymentConfig } = require("../headmasterConfig");
+  const config = { ...body, memory_gateway_url: "http://headmaster-memory-gateway:8791" };
+  const input = { external_identity: { namespace: "headmaster", external_id: config.workspace_uuid, owner_uuid: config.owner_uuid }, headmaster_integration_config: config };
+  expect(deploymentConfig({}, "hermes")).toBeNull();
+  expect(deploymentConfig(input, "hermes")).toEqual([config.owner_uuid, config.workspace_uuid, config.memory_bank_id, config.memory_gateway_url]);
+  expect(() => deploymentConfig(input, "openclaw")).toThrow();
+  expect(() => deploymentConfig({ ...input, external_identity: { ...input.external_identity, owner_uuid: "another-owner" } }, "hermes")).toThrow();
+  expect(() => deploymentConfig({ external_identity: input.external_identity }, "hermes")).toThrow();
+  expect(() => deploymentConfig({ ...input, headmaster_integration_config: { ...config, memory_gateway_url: "http://headmaster-hindsight:8888" } }, "hermes")).toThrow();
+});
