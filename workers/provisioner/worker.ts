@@ -4752,6 +4752,9 @@ const worker = new Worker(
                 ? { NEMOCLAW_MODEL: model }
                 : {}),
               ...agentSecretEnvVars,
+              ...(resolvedRuntimeFields.runtime_family === "hermes"
+                ? require("../../backend-api/headmasterConfig").headmasterEnv(agentRow)
+                : {}),
             },
           });
         const createPromise = usesLocalDockerPublishedPort
