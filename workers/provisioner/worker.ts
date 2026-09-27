@@ -641,6 +641,17 @@ async function shouldPreserveDurableState({ queryable = db, agentId } = {}) {
   }
 }
 
+function readinessOptionsForRuntimeFamily(runtimeFamily) {
+  if (runtimeFamily !== "hermes") return {};
+  return {
+    runtime: {
+      attempts: 60,
+      intervalMs: 5000,
+      timeoutMs: 5000,
+    },
+  };
+}
+
 async function cleanupProvisionedRuntimeAfterFailure({
   queryable = db,
   provisioner,
@@ -701,6 +712,7 @@ async function cleanupProvisionedRuntimeAfterFailure({
     await queryable.query(
       `UPDATE agents
           SET container_id = NULL,
+              container_name = NULL,
               host = NULL,
               runtime_host = NULL,
               runtime_port = NULL,
@@ -5058,6 +5070,10 @@ const worker = new Worker(
               },
               {
                 beforeAttempt: () => assertProvisionerAuthorized(provisioner),
+                // The s6 entrypoint can take longer to bind the Hermes API.
+                // Widen only that runtime probe; OpenClaw and gateway defaults
+                // remain unchanged.
+                ...readinessOptionsForRuntimeFamily(resolvedRuntimeFields.runtime_family),
               },
             ),
           failClosedOnReadinessFailure: true,
@@ -5257,7 +5273,13 @@ const worker = new Worker(
         }
       } catch (err) {
         if (isCanceledRuntimeCleanupFailure(err)) throw err;
-        console.error("Failed to finalize provisioned runtime:", err.message);
+        console.error("Failed to finalize provisioned runtime", {
+          agentId: id,
+          containerId,
+          code: err.code,
+          message: err.message,
+          readiness: err.readiness,
+        });
         const cleanup = await reconcileProvisioningFailureRuntime({
           queryable: db,
           provisioner,
@@ -5652,6 +5674,7 @@ module.exports = {
   markDeploymentDegraded,
   normalizeProvisionerDeployTarget,
   normalizeProvisionerExecutionTargetId,
+  readinessOptionsForRuntimeFamily,
   persistProvisionedRuntimeIdentity,
   persistProvisioningFailure,
   prepareReplacementRuntime,

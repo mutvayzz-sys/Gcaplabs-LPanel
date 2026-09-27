@@ -193,6 +193,31 @@ describe("provisioning runtime/gateway contracts", () => {
     clearTimeoutSpy.mockRestore();
   });
 
+  it("reports the low-level network target for a failed readiness probe", async () => {
+    const cause = Object.assign(new Error("connect ECONNREFUSED"), {
+      code: "ECONNREFUSED",
+      address: "169.254.169.254",
+      port: 80,
+    });
+    const fetchImpl = jest
+      .fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed", { cause }));
+
+    const result = await waitForHttpReady("http://agent.internal:9090/health", {
+      attempts: 1,
+      intervalMs: 1,
+      timeoutMs: 25,
+      fetchImpl,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      errorCode: "ECONNREFUSED",
+      errorAddress: "169.254.169.254",
+      errorPort: 80,
+    });
+  });
+
   it("reports explicit timeout errors for readiness probes", async () => {
     const fetchImpl = jest.fn().mockImplementationOnce(async (_url, { signal }) => {
       return await new Promise((_, reject) => {
@@ -1863,10 +1888,42 @@ describe("provisioning runtime/gateway contracts", () => {
       }),
     );
   });
+
+  it("never leaks the upstream Hermes deploy name into the pod hostname when no agent name is given", async () => {
+    const K8sBackend = require("../../workers/provisioner/backends/k8s");
+    const backend = new K8sBackend(
+      k8sProfile({
+        namespace: "nora-hermes-agents",
+        hermesNamespace: "nora-hermes-agents",
+      }),
+    );
+
+    await backend.create({
+      id: "999888",
+      runtimeFamily: "hermes",
+      env: {},
+    });
+
+    expect(mockCreateNamespacedDeployment).toHaveBeenCalledTimes(1);
+    const deploymentBody = mockCreateNamespacedDeployment.mock.calls[0][0].body;
+    const podHostname = deploymentBody.spec.template.spec.hostname;
+
+    // Earlier fix (#4) only renamed the literal `hermes-${id}` template, not
+    // the `deployName` fallback that ran first and still carried the
+    // upstream `nora-hermes-agent-<id>` deploy-naming template into the pod
+    // hostname whenever `name` was absent.
+    expect(podHostname).toBe("hm-999888");
+    expect(podHostname).not.toMatch(/hermes/i);
+    expect(podHostname).not.toMatch(/nora-hermes-agent/i);
+    // Sanity check: the Deployment's own name is still the (unrelated,
+    // internal) upstream-templated value — only the pod hostname must
+    // avoid it.
+    expect(deploymentBody.metadata.name).toMatch(/^nora-hermes-agent-/);
+  });
 });
 
 describe("Hermes dashboard provisioning", () => {
-  it("starts the official Hermes dashboard alongside the gateway", async () => {
+  it("enables the image-supervised Hermes dashboard alongside the gateway", async () => {
     const HermesBackend = require("../../workers/provisioner/backends/hermes");
     const backend = new HermesBackend();
     backend.updateEnv = jest.fn().mockResolvedValue(undefined);
@@ -1911,7 +1968,13 @@ describe("Hermes dashboard provisioning", () => {
     const config = backend.docker.createContainer.mock.calls[0][0];
 
     expect(config.Env).toEqual(
-      expect.arrayContaining(["GATEWAY_HEALTH_URL=http://127.0.0.1:8642"]),
+      expect.arrayContaining([
+        "GATEWAY_HEALTH_URL=http://127.0.0.1:8642",
+        "AWS_EC2_METADATA_DISABLED=true",
+        "HERMES_DISABLE_LAZY_INSTALLS=1",
+        "HERMES_NONINTERACTIVE=1",
+        "HERMES_DASHBOARD=1",
+      ]),
     );
     // Bug #2 (#297): the gateway API key must be baked into the container env so
     // the s6-supervised gateway (which reads /run/s6/container_environment, not
@@ -1942,9 +2005,9 @@ describe("Hermes dashboard provisioning", () => {
     // (s6-overlay) supervises this command directly; a nested /init fatals with
     // "s6-overlay-suexec: can only run as pid 1" and exits before port 8642 binds.
     expect(config.Cmd[2]).not.toContain("/init");
-    expect(config.Cmd[2]).toContain('nohup "$HERMES_BIN" dashboard --host 0.0.0.0 --no-open');
+    expect(config.Cmd[2]).not.toContain('nohup "$HERMES_BIN" dashboard');
     expect(config.Cmd[2]).not.toContain("--insecure");
-    expect(config.Cmd[2]).toContain(">> /opt/data/hermes-dashboard.log 2>&1");
+    expect(config.Cmd[2]).not.toContain("hermes-dashboard.log");
     expect(config.Cmd[2]).not.toContain("/proc/1/fd");
     expect(config.Cmd[2]).toContain('exec "$HERMES_BIN" gateway run');
     expect(config.Cmd.join(" ")).not.toContain("/opt/hermes/docker/entrypoint.sh");
@@ -1988,6 +2051,84 @@ describe("Hermes dashboard provisioning", () => {
         runtimePort: 8642,
       }),
     );
+  });
+
+  it("never leaks the upstream Hermes container name into the hostname when no agent name is given", async () => {
+    const HermesBackend = require("../../workers/provisioner/backends/hermes");
+    const backend = new HermesBackend();
+    backend.updateEnv = jest.fn().mockResolvedValue(undefined);
+
+    const createdContainer = {
+      id: "hermes-container-2",
+      start: jest.fn().mockResolvedValue({}),
+      inspect: jest.fn().mockResolvedValue({
+        NetworkSettings: { IPAddress: "10.0.0.51", Networks: {} },
+      }),
+      remove: jest.fn().mockResolvedValue({}),
+    };
+    const existingContainer = {
+      inspect: jest.fn().mockRejectedValue(new Error("not found")),
+    };
+
+    backend._findComposeNetwork = jest.fn().mockResolvedValue(null);
+    backend.docker = {
+      getImage: jest.fn().mockReturnValue({ inspect: jest.fn().mockResolvedValue({}) }),
+      getContainer: jest.fn().mockReturnValue(existingContainer),
+      createContainer: jest.fn().mockResolvedValue(createdContainer),
+      createVolume: jest.fn().mockResolvedValue({}),
+      getNetwork: jest.fn().mockReturnValue({ connect: jest.fn().mockResolvedValue({}) }),
+    };
+
+    // No `name` supplied — the earlier `hm-${id}` fallback fix (#4) only
+    // covered the literal template, not the `containerName` fallback that
+    // still ran first and carried the upstream `nora-hermes-agent-<id>`
+    // container-naming template into the hostname.
+    await backend.create({
+      id: "999888",
+      env: {},
+    });
+
+    const config = backend.docker.createContainer.mock.calls[0][0];
+    expect(config.Hostname).toBe("hm-999888");
+    expect(config.Hostname).not.toMatch(/hermes/i);
+    expect(config.Hostname).not.toMatch(/nora-hermes-agent/i);
+    // Sanity check: the container name itself is still the (unrelated,
+    // internal) upstream-templated value — only the externally visible
+    // hostname must avoid it.
+    expect(config.name).toMatch(/^nora-hermes-agent-/);
+  });
+});
+
+describe("Docker agent network override", () => {
+  it("uses the configured network rather than scanning for the Compose default", async () => {
+    const previous = process.env.NORA_AGENT_NETWORK;
+    process.env.NORA_AGENT_NETWORK = "nora-agents-test";
+
+    try {
+      const DockerBackend = require("../../workers/provisioner/backends/docker");
+      const backend = new DockerBackend();
+      const inspect = jest.fn().mockResolvedValue({});
+      const createNetwork = jest.fn();
+      const listContainers = jest.fn();
+      const listNetworks = jest.fn();
+      backend.docker = {
+        getNetwork: jest.fn().mockReturnValue({ inspect }),
+        createNetwork,
+        listContainers,
+        listNetworks,
+      };
+
+      await expect(backend._findComposeNetwork()).resolves.toBe("nora-agents-test");
+
+      expect(backend.docker.getNetwork).toHaveBeenCalledWith("nora-agents-test");
+      expect(inspect).toHaveBeenCalledTimes(1);
+      expect(createNetwork).not.toHaveBeenCalled();
+      expect(listContainers).not.toHaveBeenCalled();
+      expect(listNetworks).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.NORA_AGENT_NETWORK;
+      else process.env.NORA_AGENT_NETWORK = previous;
+    }
   });
 });
 

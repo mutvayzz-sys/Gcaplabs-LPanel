@@ -2041,7 +2041,13 @@ class K8sBackend extends ProvisionerBackend {
             },
           },
           spec: {
-            hostname: safeHostname(name || deployName, `hm-${id}`),
+            // Derive the hostname from an explicit agent `name` only.
+            // `deployName` is (or falls back to) an upstream-templated value
+            // like `nora-hermes-<name>-<id>`, so using it here would leak
+            // the underlying Hermes runtime branding whenever `name` is
+            // absent. Fall straight through to the already-sanitized
+            // `hm-${id}` literal instead.
+            hostname: safeHostname(name, `hm-${id}`),
             securityContext: podSecurityContext(),
             containers: [
               {

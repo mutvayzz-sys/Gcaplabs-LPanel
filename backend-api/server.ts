@@ -1292,6 +1292,13 @@ app.use("/agent-hub", require("./routes/agentHubPublic"));
 // HEADMASTER_PARENT_ORIGIN are configured.
 app.use("/internal/headmaster", require("./routes/headmaster"));
 
+// Bearer-token server-to-server surface for the Headmaster memory gateway's
+// N3 identity resolution (the "runtime-identity" adapter contract). Reachable
+// publicly as /api/integrations/headmaster/runtime-identity through the same
+// /api/ proxy path; 404s entirely unless
+// HEADMASTER_RUNTIME_IDENTITY_SERVICE_TOKEN is configured.
+app.use("/integrations/headmaster", require("./routes/headmasterRuntimeIdentity"));
+
 // ─── Auth Wall ────────────────────────────────────────────────────
 app.use(authenticateToken);
 

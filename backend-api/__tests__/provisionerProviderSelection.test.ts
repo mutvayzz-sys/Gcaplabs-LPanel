@@ -137,6 +137,7 @@ const {
   markDeploymentDegraded,
   persistProvisioningFailure,
   prepareReplacementRuntime,
+  readinessOptionsForRuntimeFamily,
   reconcileProvisioningFailureRuntime,
   shouldPreserveDurableState,
   resolveCanonicalDeploymentOwnerUserId,
@@ -193,6 +194,17 @@ beforeEach(() => {
 });
 
 describe("provisioner deployment provider selection", () => {
+  it("extends readiness polling for Hermes only", () => {
+    expect(readinessOptionsForRuntimeFamily("hermes")).toEqual({
+      runtime: {
+        attempts: 60,
+        intervalMs: 5000,
+        timeoutMs: 5000,
+      },
+    });
+    expect(readinessOptionsForRuntimeFamily("openclaw")).toEqual({});
+  });
+
   it("limits startup credentials to an explicitly pinned provider", async () => {
     mockWorkerDb.query.mockResolvedValue({ rows: [] });
 
@@ -2066,10 +2078,10 @@ describe("provisioner deployment lifecycle", () => {
       agentId: "agent-1",
       preserveState: true,
     });
-    expect(queryable.query).toHaveBeenCalledWith(expect.stringMatching(/SET container_id = NULL/), [
-      "agent-1",
-      "nora-oclaw-agent-1",
-    ]);
+    expect(queryable.query).toHaveBeenCalledWith(
+      expect.stringMatching(/SET container_id = NULL,\s*container_name = NULL/),
+      ["agent-1", "nora-oclaw-agent-1"],
+    );
     expect(provisioner.destroy.mock.invocationCallOrder[0]).toBeLessThan(
       queryable.query.mock.invocationCallOrder[0],
     );

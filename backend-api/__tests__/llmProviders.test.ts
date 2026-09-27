@@ -7,12 +7,13 @@ const mockDbClient = {
 const mockDb = { query: jest.fn() };
 const mockPgClient = jest.fn(() => mockDbClient);
 const mockEncrypt = jest.fn((value) => `enc(${value})`);
+const mockDecrypt = jest.fn();
 
 jest.mock("../db", () => mockDb);
 jest.mock("pg", () => ({ Client: mockPgClient }));
 jest.mock("../crypto", () => ({
   encrypt: mockEncrypt,
-  decrypt: jest.fn(),
+  decrypt: mockDecrypt,
   ensureEncryptionConfigured: jest.fn(),
 }));
 
@@ -23,6 +24,7 @@ const {
   ensureDemoProvider,
   getDeploymentProvider,
   getManagedProviderEnvNames,
+  resolveInferenceProvider,
   updateProvider,
   withProviderStateLock,
 } = require("../llmProviders");
@@ -34,6 +36,7 @@ beforeEach(() => {
   mockDbClient.query.mockReset().mockResolvedValue({ rows: [] });
   mockDbClient.end.mockReset().mockResolvedValue(undefined);
   mockEncrypt.mockClear();
+  mockDecrypt.mockReset().mockReturnValue("decrypted-provider-key");
 });
 
 describe("llmProviders demo/default transitions", () => {

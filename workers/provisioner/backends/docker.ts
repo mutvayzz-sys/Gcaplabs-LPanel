@@ -320,6 +320,26 @@ class DockerBackend extends ProvisionerBackend {
    */
   async _findComposeNetwork() {
     if (this._composeNetwork) return this._composeNetwork;
+    // GCAP patch (0001): operator-selected agent-facing network. Runtime and
+    // explicitly attached integration services use this bridge; the API and
+    // worker may remain multi-homed with the Compose default. This selects
+    // connectivity but is not a complete network sandbox. Created if missing.
+    const override = (process.env.NORA_AGENT_NETWORK || "").trim();
+    if (override) {
+      try {
+        await this.docker.getNetwork(override).inspect();
+      } catch {
+        try {
+          await this.docker.createNetwork({ Name: override, Driver: "bridge", CheckDuplicate: true });
+          console.log(`[docker] Created agent network ${override}`);
+        } catch (error) {
+          console.warn(`[docker] Could not ensure agent network ${override}: ${error.message}`);
+        }
+      }
+      this._composeNetwork = override;
+      console.log(`[docker] Using agent network override: ${override}`);
+      return this._composeNetwork;
+    }
 
     // Strategy 1: self-inspect via container ID from hostname
     try {
