@@ -2450,8 +2450,43 @@ router.post("/adopt", async (req, res) => {
   }
 });
 
-const EXTERNAL_IDENTITY_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EXTERNAL_IDENTITY_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+router.get(
+  "/:id/managed-config",
+  asyncHandler(async (req, res) => {
+    const agent = await findAccessibleAgentForRequest(req, req.params.id, "viewer");
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+    res.json(require("../headmasterConfig").managedConfigStatus(agent));
+  }),
+);
+
+router.patch(
+  "/:id/integrations/headmaster",
+  asyncHandler(async (req, res) => {
+    const agent = await findAccessibleAgentForRequest(req, req.params.id, "editor");
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+    res.json(
+      await require("../headmasterConfig").updateManagedConfig(agent, req.body, {
+        apiKeyWorkspaceId: apiKeyWorkspaceId(req),
+      }),
+    );
+  }),
+);
+
+router.post(
+  "/:id/managed-config/retry",
+  asyncHandler(async (req, res) => {
+    const agent = await findAccessibleAgentForRequest(req, req.params.id, "editor");
+    if (!agent) return res.status(404).json({ error: "Agent not found" });
+    res.json(
+      await require("../headmasterConfig").updateManagedConfig(agent, null, {
+        retry: true,
+        apiKeyWorkspaceId: apiKeyWorkspaceId(req),
+      }),
+    );
+  }),
+);
 
 // Bind an agent to its immutable external (Headmaster) identity. Called by
 // the Headmaster hermes-bridge provisioner right after an agent is created

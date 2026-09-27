@@ -184,6 +184,7 @@ function getManagedProviderEnvNames({ runtimeFamily = "openclaw" } = {}) {
   ) {
     names.add(HERMES_MANAGED_ENV_ENV);
     names.add(HERMES_MODEL_CONFIG_ENV);
+    for (const name of require("./headmasterConfig").HEADMASTER_ENV_NAMES) names.add(name);
   } else {
     names.add("NORA_DEFAULT_OPENCLAW_MODEL");
   }

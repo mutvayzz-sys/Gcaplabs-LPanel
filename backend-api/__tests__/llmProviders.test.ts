@@ -554,6 +554,19 @@ describe("llmProviders.buildBaseUrlEnvVars", () => {
   });
 });
 
+describe("Headmaster managed env allowlist", () => {
+  it("includes all four names for the hosted runtime only", () => {
+    const { getManagedProviderEnvNames } = require("../llmProviders");
+    const { HEADMASTER_ENV_NAMES } = require("../headmasterConfig");
+    expect(getManagedProviderEnvNames({ runtimeFamily: "hermes" })).toEqual(
+      expect.arrayContaining(HEADMASTER_ENV_NAMES),
+    );
+    expect(getManagedProviderEnvNames({ runtimeFamily: "openclaw" })).not.toEqual(
+      expect.arrayContaining(HEADMASTER_ENV_NAMES),
+    );
+  });
+});
+
 describe("llmProviders.buildApiVersionEnvVars", () => {
   const { buildApiVersionEnvVars } = require("../llmProviders");
 

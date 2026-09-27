@@ -392,6 +392,15 @@ async function buildOpenClawManagedEnvForAgent(
  * @returns {Promise<Object>} Filtered managed environment values.
  */
 async function buildHermesManagedEnvForAgent(userId, agentId) {
+  // Fail closed on a database error: dropping this state from the full managed
+  // environment would silently remove the runtime's account/memory identity.
+  const headmaster = await db.query(
+    `SELECT headmaster_owner_id, headmaster_workspace_id,
+            headmaster_memory_bank_id, headmaster_memory_gateway_url
+       FROM agents WHERE id = $1 AND user_id = $2`,
+    [agentId, userId],
+  );
+  const headmasterEnvVars = require("./headmasterConfig").headmasterEnv(headmaster.rows[0]);
   const llmKeys = await llmProviders.getProviderKeys(userId);
   const overrides =
     typeof llmProviders.getProviderEndpoints === "function"
@@ -427,6 +436,7 @@ async function buildHermesManagedEnvForAgent(userId, agentId) {
         ...llmKeys,
         ...baseUrlEnvVars,
         ...apiVersionEnvVars,
+        ...headmasterEnvVars,
       }).filter(([key, value]) => key && value != null && String(value) !== ""),
     );
   } catch {
@@ -436,6 +446,7 @@ async function buildHermesManagedEnvForAgent(userId, agentId) {
         ...llmKeys,
         ...baseUrlEnvVars,
         ...apiVersionEnvVars,
+        ...headmasterEnvVars,
       }).filter(([key, value]) => key && value != null && String(value) !== ""),
     );
   }
