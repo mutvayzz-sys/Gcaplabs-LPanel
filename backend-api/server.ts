@@ -2460,6 +2460,13 @@ async function migrateDB(database = db, env = process.env) {
     `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_namespace TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE agents ADD COLUMN external_owner_uuid TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS headmaster_owner_id TEXT`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS headmaster_workspace_id TEXT`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS headmaster_memory_bank_id TEXT`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS headmaster_memory_gateway_url TEXT`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS headmaster_integration_desired_revision INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS headmaster_integration_applied_revision INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE agents ADD COLUMN IF NOT EXISTS headmaster_integration_deployment_status TEXT`,
   ];
 
   return runVersionedMigrations(database, migrations, {
@@ -2623,9 +2630,11 @@ if (require.main === module) {
 
       // Headmaster launch exchange: schema, revocation pub/sub, and the
       // bounded-delay session revalidator. No-op unless configured.
-      require("./headmasterLaunch").init().catch((e) => {
-        console.error("headmaster launch init failed:", e.message);
-      });
+      require("./headmasterLaunch")
+        .init()
+        .catch((e) => {
+          console.error("headmaster launch init failed:", e.message);
+        });
 
       // Dev-mode only: persist the generated JWT secret in platform_settings so
       // sessions survive restarts; on later boots restore the stored one. The
