@@ -76,6 +76,7 @@ jest.mock("../healthChecks", () => ({
 const {
   buildDefaultModelCommand,
   buildHermesEnvWriteCommand,
+  buildHermesManagedEnvForAgent,
   buildOpenClawManagedEnvForAgent,
   PROVIDER_AUTH_PENDING_REASON,
   runContainerCommand,
@@ -120,7 +121,7 @@ describe("auth sync", () => {
   let consoleWarnSpy;
 
   beforeEach(() => {
-    mockDb.query.mockReset();
+    mockDb.query.mockReset().mockResolvedValue({ rows: [] });
     mockExec.mockReset().mockResolvedValue(execResult());
     mockStart.mockReset().mockResolvedValue(undefined);
     mockRestart.mockReset().mockResolvedValue(undefined);
@@ -191,6 +192,56 @@ describe("auth sync", () => {
     consoleLogSpy.mockRestore();
     consoleWarnSpy.mockRestore();
     delete global.fetch;
+  });
+
+  it("keeps Headmaster identity alongside provider and integration env, including after key rotation", async () => {
+    mockDb.query.mockResolvedValue({
+      rows: [
+        {
+          headmaster_owner_id: "owner",
+          headmaster_workspace_id: "workspace",
+          headmaster_memory_bank_id: "bank",
+          headmaster_memory_gateway_url: "http://memory:8888",
+        },
+      ],
+    });
+    mockGetIntegrationEnvVars.mockResolvedValue({
+      GITHUB_TOKEN: "fixture",
+      HEADMASTER_OWNER_ID: "spoof",
+    });
+    expect(await buildHermesManagedEnvForAgent("user", "agent")).toMatchObject({
+      HEADMASTER_OWNER_ID: "owner",
+      HEADMASTER_WORKSPACE_ID: "workspace",
+      HEADMASTER_MEMORY_BANK_ID: "bank",
+      HEADMASTER_MEMORY_GATEWAY_URL: "http://memory:8888",
+      OPENAI_API_KEY: "sk-live-test",
+      GITHUB_TOKEN: "fixture",
+    });
+    mockGetProviderKeys.mockResolvedValue({ OPENAI_API_KEY: "rotated-fixture" });
+    expect(await buildHermesManagedEnvForAgent("user", "agent")).toMatchObject({
+      HEADMASTER_OWNER_ID: "owner",
+      OPENAI_API_KEY: "rotated-fixture",
+    });
+    mockGetIntegrationEnvVars.mockRejectedValue(new Error("unavailable"));
+    expect(await buildHermesManagedEnvForAgent("user", "agent")).toMatchObject({
+      HEADMASTER_OWNER_ID: "owner",
+      OPENAI_API_KEY: "rotated-fixture",
+    });
+  });
+
+  it("fails closed on Headmaster persistence read failure before any runtime write", async () => {
+    mockDb.query.mockRejectedValue(new Error("database unavailable"));
+    await expect(buildHermesManagedEnvForAgent("user", "agent")).rejects.toThrow(
+      "database unavailable",
+    );
+    expect(mockUpdateEnv).not.toHaveBeenCalled();
+  });
+
+  it("does not accept reserved Headmaster variables from generic integrations", async () => {
+    mockGetIntegrationEnvVars.mockResolvedValue({ HEADMASTER_OWNER_ID: "spoof" });
+    expect(await buildHermesManagedEnvForAgent("user", "agent")).not.toHaveProperty(
+      "HEADMASTER_OWNER_ID",
+    );
   });
 
   it("adds enabled MCP alias credentials to the exact OpenClaw managed environment", async () => {

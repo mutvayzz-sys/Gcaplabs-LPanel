@@ -5056,6 +5056,55 @@ describe("PATCH /agents/:id", () => {
   });
 });
 
+describe("Headmaster managed-config routes", () => {
+  it("returns only revision status and key names to an authorized viewer", async () => {
+    mockDb.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "managed",
+          user_id: "user-1",
+          headmaster_owner_id: "private-owner",
+          gateway_token: "private-token",
+        },
+      ],
+    });
+    const res = await auth(request(app).get("/agents/managed/managed-config"));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      integration_key_names: ["HEADMASTER_OWNER_ID"],
+      desired_revision: 0,
+      applied_revision: 0,
+      deployment_status: "unconfigured",
+    });
+  });
+  it.each(["get", "patch", "post"])("denies inaccessible agents for %s", async (method) => {
+    mockDb.query.mockResolvedValue({ rows: [] });
+    const path =
+      method === "patch"
+        ? "integrations/headmaster"
+        : method === "post"
+          ? "managed-config/retry"
+          : "managed-config";
+    const res = await auth(request(app)[method](`/agents/foreign/${path}`).send({}));
+    expect(res.status).toBe(404);
+    expect(mockSyncAuthToUserAgents).not.toHaveBeenCalled();
+  });
+  it("validates PATCH body before writing config", async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: "managed", user_id: "user-1" }] });
+    const res = await auth(request(app).patch("/agents/managed/integrations/headmaster").send({}));
+    expect(res.status).toBe(400);
+    expect(mockSyncAuthToUserAgents).not.toHaveBeenCalled();
+  });
+  it("returns 400 for retry before configuration", async () => {
+    mockDb.query.mockResolvedValue({
+      rows: [{ id: "managed", user_id: "user-1", runtime_family: "hermes" }],
+    });
+    const res = await auth(request(app).post("/agents/managed/managed-config/retry"));
+    expect(res.status).toBe(400);
+    expect(mockSyncAuthToUserAgents).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /agents/:id/integrations/headmaster/adopt", () => {
   const EXTERNAL_ID = "47a0b178-0497-4b83-91f9-92af078310d0";
   const OWNER_UUID = "f125bb2c-1ce1-4b01-9da5-9b736caf503f";
@@ -5064,7 +5113,9 @@ describe("POST /agents/:id/integrations/headmaster/adopt", () => {
     const monitoringModule = require("../monitoring");
     mockDb.query
       .mockResolvedValueOnce({
-        rows: [{ id: "a-adopt", name: "Hermes-Agent", user_id: "user-1", external_namespace: null }],
+        rows: [
+          { id: "a-adopt", name: "Hermes-Agent", user_id: "user-1", external_namespace: null },
+        ],
       })
       .mockResolvedValueOnce({
         rows: [
@@ -5192,13 +5243,21 @@ describe("POST /agents/:id/integrations/headmaster/adopt", () => {
 
   it("rejects a missing or malformed external_identity", async () => {
     mockDb.query.mockResolvedValueOnce({
-      rows: [{ id: "a-adopt-4", name: "Hermes-Agent", user_id: "user-1", external_namespace: null }],
+      rows: [
+        { id: "a-adopt-4", name: "Hermes-Agent", user_id: "user-1", external_namespace: null },
+      ],
     });
 
     const res = await auth(
       request(app)
         .post("/agents/a-adopt-4/integrations/headmaster/adopt")
-        .send({ external_identity: { namespace: "headmaster", external_id: "not-a-uuid", owner_uuid: OWNER_UUID } }),
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: "not-a-uuid",
+            owner_uuid: OWNER_UUID,
+          },
+        }),
     );
 
     expect(res.status).toBe(400);

@@ -53,6 +53,13 @@ CREATE TABLE IF NOT EXISTS agents (
   external_namespace TEXT,
   external_id TEXT,
   external_owner_uuid TEXT,
+  headmaster_owner_id TEXT,
+  headmaster_workspace_id TEXT,
+  headmaster_memory_bank_id TEXT,
+  headmaster_memory_gateway_url TEXT,
+  headmaster_integration_desired_revision INTEGER NOT NULL DEFAULT 0,
+  headmaster_integration_applied_revision INTEGER NOT NULL DEFAULT 0,
+  headmaster_integration_deployment_status TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
