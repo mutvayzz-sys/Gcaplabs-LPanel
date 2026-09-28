@@ -33,7 +33,12 @@ const REVALIDATE_SECONDS = clampInt(process.env.HEADMASTER_REVALIDATE_SECONDS, 2
 // GCAP side has no admin session-enumeration API, so liveness revalidation
 // covers role/suspension while this TTL bounds any stale binding. Re-launch
 // from the workspace renews it.
-const SESSION_TTL_SECONDS = clampInt(process.env.HEADMASTER_SESSION_TTL_SECONDS, 12 * 60 * 60, 300, 7 * 24 * 60 * 60);
+const SESSION_TTL_SECONDS = clampInt(
+  process.env.HEADMASTER_SESSION_TTL_SECONDS,
+  12 * 60 * 60,
+  300,
+  7 * 24 * 60 * 60,
+);
 const REVOKE_CHANNEL = "hm:chan:revoke";
 const KEY = {
   code: (hash) => `hm:code:${hash}`,
@@ -87,9 +92,14 @@ function isExactHttpsOrigin(value) {
 
 function assertParentOrigin(value) {
   const expected = configuredParentOrigin();
-  if (!expected) throw httpError(503, "headmaster_disabled", "Headmaster launch is not configured.");
+  if (!expected)
+    throw httpError(503, "headmaster_disabled", "Headmaster launch is not configured.");
   if (!isExactHttpsOrigin(value) || value.toLowerCase() !== expected.toLowerCase()) {
-    throw httpError(403, "origin_mismatch", "Launch origin does not match the configured parent origin.");
+    throw httpError(
+      403,
+      "origin_mismatch",
+      "Launch origin does not match the configured parent origin.",
+    );
   }
 }
 
@@ -158,7 +168,14 @@ async function audit(event, outcome, { gcapUserId, noraUserId, gcapSessionId, de
     await db.query(
       `INSERT INTO headmaster_audit (event, outcome, gcap_user_id, nora_user_id, gcap_session_id, detail)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [event, outcome, gcapUserId || null, noraUserId || null, gcapSessionId || null, detail ? JSON.stringify(detail) : null],
+      [
+        event,
+        outcome,
+        gcapUserId || null,
+        noraUserId || null,
+        gcapSessionId || null,
+        detail ? JSON.stringify(detail) : null,
+      ],
     );
   } catch (error) {
     console.error("headmaster audit write failed:", error.message);
@@ -189,7 +206,12 @@ async function resolveHeadmasterLink(gcapUserId) {
     [gcapUserId],
   );
   const link = rows[0];
-  if (!link) throw httpError(403, "no_admin_link", "No approved Nora administrator is linked to this account.");
+  if (!link)
+    throw httpError(
+      403,
+      "no_admin_link",
+      "No approved Nora administrator is linked to this account.",
+    );
   return link;
 }
 
@@ -203,10 +225,7 @@ async function createHeadmasterLink({ gcapUserId, noraUserId, actor }) {
     throw httpError(400, "invalid_gcap_user", "A GCAP user id is required.");
   }
   await ensureSchema();
-  const { rows } = await db.query(
-    "SELECT id, email, role FROM users WHERE id = $1",
-    [noraUserId],
-  );
+  const { rows } = await db.query("SELECT id, email, role FROM users WHERE id = $1", [noraUserId]);
   const target = rows[0];
   if (!target) throw httpError(404, "nora_user_missing", "The Nora user to link does not exist.");
   if (target.role !== "admin") {
@@ -221,7 +240,11 @@ async function createHeadmasterLink({ gcapUserId, noraUserId, actor }) {
            created_by = EXCLUDED.created_by`,
     [gcapUserId, noraUserId, actor && actor !== "s2s" ? actor : null],
   );
-  await audit("link_created", "allowed", { gcapUserId, noraUserId, detail: { actor: actor || null } });
+  await audit("link_created", "allowed", {
+    gcapUserId,
+    noraUserId,
+    detail: { actor: actor || null },
+  });
   return { gcapUserId, noraUserId };
 }
 
@@ -259,12 +282,17 @@ const BROWSER_NONCE_PATTERN = /^[A-Fa-f0-9]{32,128}$/;
  * GCAP session, admin role, and suspension state.
  */
 async function createLaunchCode({ gcapUserId, gcapSessionId, browserNonce, parentOrigin }) {
-  if (!isEnabled()) throw httpError(503, "headmaster_disabled", "Headmaster launch is not configured.");
+  if (!isEnabled())
+    throw httpError(503, "headmaster_disabled", "Headmaster launch is not configured.");
   if (typeof gcapSessionId !== "string" || gcapSessionId.length < 8 || gcapSessionId.length > 256) {
     throw httpError(400, "invalid_session", "A GCAP session id is required.");
   }
   if (!BROWSER_NONCE_PATTERN.test(browserNonce || "")) {
-    throw httpError(400, "invalid_browser_nonce", "A browser nonce from the initiating browser is required.");
+    throw httpError(
+      400,
+      "invalid_browser_nonce",
+      "A browser nonce from the initiating browser is required.",
+    );
   }
   assertParentOrigin(parentOrigin);
   const link = await resolveHeadmasterLink(gcapUserId);
@@ -277,7 +305,13 @@ async function createLaunchCode({ gcapUserId, gcapSessionId, browserNonce, paren
     u: link.nora_user_id,
     o: configuredParentOrigin().toLowerCase(),
   });
-  const set = await getRedis().set(KEY.code(sha256Hex(code)), payload, "EX", CODE_TTL_SECONDS, "NX");
+  const set = await getRedis().set(
+    KEY.code(sha256Hex(code)),
+    payload,
+    "EX",
+    CODE_TTL_SECONDS,
+    "NX",
+  );
   if (set !== "OK") throw httpError(503, "issue_failed", "Could not issue the launch code.");
   await audit("code_issued", "allowed", {
     gcapUserId,
@@ -292,16 +326,22 @@ async function createLaunchCode({ gcapUserId, gcapSessionId, browserNonce, paren
  * Returns the resolved Nora identity; the caller mints the session.
  */
 async function consumeLaunchCode({ code, browserNonceCookie }) {
-  if (!isEnabled()) throw httpError(503, "headmaster_disabled", "Headmaster launch is not configured.");
+  if (!isEnabled())
+    throw httpError(503, "headmaster_disabled", "Headmaster launch is not configured.");
   if (!CODE_PATTERN.test(code || "")) throw httpError(400, "invalid_code", "Invalid launch code.");
   if (!BROWSER_NONCE_PATTERN.test(browserNonceCookie || "")) {
-    throw httpError(403, "browser_binding_missing", "Launch redemption requires the initiating browser cookie.");
+    throw httpError(
+      403,
+      "browser_binding_missing",
+      "Launch redemption requires the initiating browser cookie.",
+    );
   }
   const redis = getRedis();
   const codeHash = sha256Hex(code);
   // GETDEL is atomic: a replayed code finds nothing on the second attempt.
   const raw = await redis.getdel(KEY.code(codeHash));
-  if (!raw) throw httpError(403, "code_invalid", "Launch code is invalid, expired, or already used.");
+  if (!raw)
+    throw httpError(403, "code_invalid", "Launch code is invalid, expired, or already used.");
   let binding;
   try {
     binding = JSON.parse(raw);
@@ -314,14 +354,22 @@ async function consumeLaunchCode({ code, browserNonceCookie }) {
   }
   if (!timingSafeEqual(binding.n, sha256Hex(browserNonceCookie))) {
     await audit("redeem_rejected", "denied", { detail: { reason: "browser_binding_mismatch" } });
-    throw httpError(403, "browser_binding_mismatch", "Launch was initiated by a different browser.");
+    throw httpError(
+      403,
+      "browser_binding_mismatch",
+      "Launch was initiated by a different browser.",
+    );
   }
   // Re-resolve at redemption time: a link removed between issuance and
   // redemption cancels the launch.
   const link = await resolveHeadmasterLink(binding.g);
   if (link.nora_user_id !== binding.u) {
     await audit("redeem_rejected", "denied", { detail: { reason: "identity_swapped" } });
-    throw httpError(403, "identity_mismatch", "Launch code no longer matches the linked administrator.");
+    throw httpError(
+      403,
+      "identity_mismatch",
+      "Launch code no longer matches the linked administrator.",
+    );
   }
   if (link.role !== "admin") {
     await audit("redeem_rejected", "denied", {
@@ -329,14 +377,23 @@ async function consumeLaunchCode({ code, browserNonceCookie }) {
       noraUserId: link.nora_user_id,
       detail: { reason: "nora_role_not_admin" },
     });
-    throw httpError(403, "nora_user_not_admin", "The linked Nora account is no longer an administrator.");
+    throw httpError(
+      403,
+      "nora_user_not_admin",
+      "The linked Nora account is no longer an administrator.",
+    );
   }
   await audit("code_consumed", "allowed", {
     gcapUserId: binding.g,
     noraUserId: link.nora_user_id,
     gcapSessionId: binding.s,
   });
-  return { gcapUserId: binding.g, gcapSessionId: binding.s, noraUserId: link.nora_user_id, email: link.email };
+  return {
+    gcapUserId: binding.g,
+    gcapSessionId: binding.s,
+    noraUserId: link.nora_user_id,
+    email: link.email,
+  };
 }
 
 // ── Headmaster-launched session records ──────────────────────────────────────
@@ -360,7 +417,12 @@ async function createHeadmasterSession({ gcapUserId, gcapSessionId, noraUserId, 
     // Fail closed: never hand out an untracked hm session.
     throw httpError(503, "storage_unavailable", "Could not record the launch session.");
   }
-  await audit("session_created", "allowed", { gcapUserId, noraUserId, gcapSessionId, detail: { email, role } });
+  await audit("session_created", "allowed", {
+    gcapUserId,
+    noraUserId,
+    gcapSessionId,
+    detail: { email, role },
+  });
   return jti;
 }
 
@@ -370,7 +432,11 @@ async function sessionExists(jti) {
     return Boolean(await getRedis().exists(KEY.sess(jti)));
   } catch (error) {
     console.error("headmaster session check failed closed:", error.message);
-    throw httpError(503, "authorization_unavailable", "Session authorization could not be verified.");
+    throw httpError(
+      503,
+      "authorization_unavailable",
+      "Session authorization could not be verified.",
+    );
   }
 }
 
@@ -445,10 +511,12 @@ async function revokeHeadmasterSessions({ gcapSessionId, gcapUserId, noraUserId,
     // Terminate already-open privileged WebSockets immediately (local process)
     // and in every other backend replica via pub/sub.
     closeLocalSockets(jtis, noraUserIds);
-    redis.publish(
-      REVOKE_CHANNEL,
-      JSON.stringify({ jtis: [...jtis], noraUserIds: [...noraUserIds], reason: reason || null }),
-    ).catch(() => {});
+    redis
+      .publish(
+        REVOKE_CHANNEL,
+        JSON.stringify({ jtis: [...jtis], noraUserIds: [...noraUserIds], reason: reason || null }),
+      )
+      .catch(() => {});
     await audit("sessions_revoked", "allowed", {
       gcapUserId: gcapUserId || null,
       noraUserId: noraUserId || null,
@@ -636,7 +704,11 @@ function startSessionRevalidator() {
             if (response.ok) {
               const data = await response.json().catch(() => ({}));
               if (data && data.active === true) {
-                await getRedis().set(key, JSON.stringify({ ...record, checked: Date.now() }), "KEEPTTL");
+                await getRedis().set(
+                  key,
+                  JSON.stringify({ ...record, checked: Date.now() }),
+                  "KEEPTTL",
+                );
                 return;
               }
             }
@@ -659,7 +731,9 @@ function startSessionRevalidator() {
 // ── Session issuance (cookie + JWT) ──────────────────────────────────────────
 
 async function issueHeadmasterSession(res, req, identity) {
-  const { rows } = await db.query("SELECT id, email, role FROM users WHERE id = $1", [identity.noraUserId]);
+  const { rows } = await db.query("SELECT id, email, role FROM users WHERE id = $1", [
+    identity.noraUserId,
+  ]);
   const user = rows[0];
   if (!user || user.role !== "admin") {
     throw httpError(403, "nora_user_not_admin", "The linked Nora account is not an administrator.");
@@ -686,7 +760,9 @@ async function issueHeadmasterSession(res, req, identity) {
   );
   // Cross-site iframe context: SameSite=None (+Partitioned for browsers that
   // gate third-party cookies) and always Secure behind HTTPS.
-  const isSecure = process.env.NORA_FORCE_SECURE_COOKIES === "1" || Boolean(req?.secure) ||
+  const isSecure =
+    process.env.NORA_FORCE_SECURE_COOKIES === "1" ||
+    Boolean(req?.secure) ||
     req?.headers?.["x-forwarded-proto"] === "https";
   res.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
@@ -718,7 +794,8 @@ function readLaunchBrowserCookie(req) {
     .filter(Boolean)
     .reduce((acc, entry) => {
       const sep = entry.indexOf("=");
-      if (sep !== -1) acc[entry.slice(0, sep).trim()] = decodeURIComponent(entry.slice(sep + 1).trim());
+      if (sep !== -1)
+        acc[entry.slice(0, sep).trim()] = decodeURIComponent(entry.slice(sep + 1).trim());
       return acc;
     }, {});
   return cookies.hm_launch_browser || null;

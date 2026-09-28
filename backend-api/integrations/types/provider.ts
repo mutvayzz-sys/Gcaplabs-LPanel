@@ -35,13 +35,7 @@ export interface RefreshOutcome {
 }
 
 export type ProviderAuthType =
-  | "api_key"
-  | "oauth2"
-  | "basic"
-  | "webhook"
-  | "custom"
-  | "credentials"
-  | "service_account";
+  "api_key" | "oauth2" | "basic" | "webhook" | "custom" | "credentials" | "service_account";
 
 export interface ProviderDeps {
   fetch: typeof fetch;

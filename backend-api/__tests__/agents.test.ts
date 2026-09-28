@@ -4072,15 +4072,39 @@ describe("POST /agents/deploy", () => {
     const owner = "11111111-1111-4111-8111-111111111111";
     const workspace = "22222222-2222-4222-8222-222222222222";
     const bank = "hermes-u-" + owner.replaceAll("-", "_");
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: "a-managed", name: "Managed", status: "queued", user_id: "user-1" }] }).mockResolvedValueOnce({ rows: [] });
-    const res = await auth(request(app).post("/agents/deploy").send({
-      name: "Managed", runtime_family: "hermes",
-      external_identity: { namespace: "headmaster", external_id: workspace, owner_uuid: owner },
-      headmaster_integration_config: { owner_uuid: owner, workspace_uuid: workspace, memory_bank_id: bank, memory_gateway_url: "http://headmaster-memory-gateway:8791" },
-    }));
+    mockDb.query
+      .mockResolvedValueOnce({
+        rows: [{ id: "a-managed", name: "Managed", status: "queued", user_id: "user-1" }],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    const res = await auth(
+      request(app)
+        .post("/agents/deploy")
+        .send({
+          name: "Managed",
+          runtime_family: "hermes",
+          external_identity: { namespace: "headmaster", external_id: workspace, owner_uuid: owner },
+          headmaster_integration_config: {
+            owner_uuid: owner,
+            workspace_uuid: workspace,
+            memory_bank_id: bank,
+            memory_gateway_url: "http://headmaster-memory-gateway:8791",
+          },
+        }),
+    );
     expect(res.status).toBe(200);
     const insert = mockDb.query.mock.calls.find(([sql]) => sql.includes("INSERT INTO agents"));
-    expect(insert[1].slice(17)).toEqual(["headmaster", workspace, owner, owner, workspace, bank, "http://headmaster-memory-gateway:8791", 1, "pending"]);
+    expect(insert[1].slice(17)).toEqual([
+      "headmaster",
+      workspace,
+      owner,
+      owner,
+      workspace,
+      bank,
+      "http://headmaster-memory-gateway:8791",
+      1,
+      "pending",
+    ]);
     expect(mockAddDeploymentJob).toHaveBeenCalledWith(expect.objectContaining({ id: "a-managed" }));
   });
 

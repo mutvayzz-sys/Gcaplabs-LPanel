@@ -106,7 +106,9 @@ async function authenticateToken(req, res, next) {
       if (decoded.hm && decoded.jti) {
         const headmasterLaunch = require("../headmasterLaunch");
         if (!(await headmasterLaunch.sessionExists(decoded.jti))) {
-          return res.status(401).json({ error: "Session has been revoked", code: "session_revoked" });
+          return res
+            .status(401)
+            .json({ error: "Session has been revoked", code: "session_revoked" });
         }
       }
       req.user = decoded;
