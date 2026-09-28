@@ -78,6 +78,7 @@ const {
 const {
   deleteHermesChannel,
   listHermesChannels,
+  persistHermesMemoryProviderConfig,
   readHermesRuntimeSnapshot,
   saveHermesChannel,
   testHermesChannel,
@@ -2531,6 +2532,12 @@ router.post(
       });
     }
 
+    const memory = req.body?.memory;
+    const memoryProvider = typeof memory?.provider === "string" ? memory.provider.trim() : "";
+    if (memoryProvider && memoryProvider !== "hindsight") {
+      return res.status(400).json({ error: 'memory.provider must be "hindsight"' });
+    }
+
     const alreadyAdopted = agent.external_namespace != null;
     if (
       alreadyAdopted &&
@@ -2562,7 +2569,25 @@ router.post(
       );
     }
 
-    res.json({ ...serializeAgent(updated.rows[0]), adopted: true });
+    // Optional: stamp the runtime's own memory.provider so Settings/the Memory
+    // dashboard read it as active instead of unset. The bank itself is wired
+    // through the separate memory-gateway managed config (env vars), not here.
+    // Best-effort: a runtime that isn't reachable yet must not fail identity
+    // binding, since the caller (provisioning) retries this same call.
+    let memoryStamp;
+    if (memoryProvider) {
+      try {
+        memoryStamp = await persistHermesMemoryProviderConfig(updated.rows[0], memoryProvider);
+      } catch (error) {
+        memoryStamp = { ok: false, error: error?.message || String(error) };
+      }
+    }
+
+    res.json({
+      ...serializeAgent(updated.rows[0]),
+      adopted: true,
+      ...(memoryStamp ? { memory: memoryStamp } : {}),
+    });
   }),
 );
 
