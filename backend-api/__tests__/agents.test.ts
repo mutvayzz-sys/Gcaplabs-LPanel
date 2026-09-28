@@ -37,6 +37,12 @@ const mockListHermesChannels = jest.fn();
 const mockSaveHermesChannel = jest.fn();
 const mockDeleteHermesChannel = jest.fn();
 const mockTestHermesChannel = jest.fn();
+const mockPersistHermesMemoryProviderConfig = jest.fn().mockResolvedValue({
+  ok: true,
+  mutated: true,
+  provider: "hindsight",
+  configPath: "/opt/hermes/config.yaml",
+});
 const mockReadHermesRuntimeSnapshot = jest.fn().mockResolvedValue({
   runtimeStatus: {
     gateway_state: "running",
@@ -336,6 +342,7 @@ jest.mock("../hermesUi", () => ({
   deleteHermesChannel: mockDeleteHermesChannel,
   testHermesChannel: mockTestHermesChannel,
   readHermesRuntimeSnapshot: mockReadHermesRuntimeSnapshot,
+  persistHermesMemoryProviderConfig: mockPersistHermesMemoryProviderConfig,
 }));
 jest.mock("../agentMigrations", () => ({
   attachDraftToAgent: mockAttachDraftToAgent,
@@ -5297,6 +5304,122 @@ describe("POST /agents/:id/integrations/headmaster/adopt", () => {
     );
 
     expect(res.status).toBe(404);
+  });
+
+  it("stamps the runtime's memory provider when the caller sends a memory block", async () => {
+    mockPersistHermesMemoryProviderConfig.mockClear();
+    mockDb.query
+      .mockResolvedValueOnce({
+        rows: [
+          { id: "a-adopt-5", name: "Hermes-Agent", user_id: "user-1", external_namespace: null },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "a-adopt-5",
+            name: "Hermes-Agent",
+            user_id: "user-1",
+            external_namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            external_owner_uuid: OWNER_UUID,
+            runtime_host: "172.20.0.9",
+            dashboard_port: 9119,
+          },
+        ],
+      });
+
+    const res = await auth(
+      request(app)
+        .post("/agents/a-adopt-5/integrations/headmaster/adopt")
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            owner_uuid: OWNER_UUID,
+          },
+          memory: { provider: "hindsight", bank: "hermes-u-bank-5" },
+        }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockPersistHermesMemoryProviderConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "a-adopt-5" }),
+      "hindsight",
+    );
+    expect(res.body).toMatchObject({
+      id: "a-adopt-5",
+      adopted: true,
+      memory: { ok: true, mutated: true, provider: "hindsight" },
+    });
+  });
+
+  it("rejects a memory block naming an unsupported provider", async () => {
+    mockPersistHermesMemoryProviderConfig.mockClear();
+    mockDb.query.mockResolvedValueOnce({
+      rows: [
+        { id: "a-adopt-6", name: "Hermes-Agent", user_id: "user-1", external_namespace: null },
+      ],
+    });
+
+    const res = await auth(
+      request(app)
+        .post("/agents/a-adopt-6/integrations/headmaster/adopt")
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            owner_uuid: OWNER_UUID,
+          },
+          memory: { provider: "mem0" },
+        }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(mockPersistHermesMemoryProviderConfig).not.toHaveBeenCalled();
+  });
+
+  it("does not fail identity binding when stamping the memory provider errors", async () => {
+    mockPersistHermesMemoryProviderConfig.mockClear();
+    mockPersistHermesMemoryProviderConfig.mockRejectedValueOnce(new Error("runtime unreachable"));
+    mockDb.query
+      .mockResolvedValueOnce({
+        rows: [
+          { id: "a-adopt-7", name: "Hermes-Agent", user_id: "user-1", external_namespace: null },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "a-adopt-7",
+            name: "Hermes-Agent",
+            user_id: "user-1",
+            external_namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            external_owner_uuid: OWNER_UUID,
+          },
+        ],
+      });
+
+    const res = await auth(
+      request(app)
+        .post("/agents/a-adopt-7/integrations/headmaster/adopt")
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            owner_uuid: OWNER_UUID,
+          },
+          memory: { provider: "hindsight", bank: "hermes-u-bank-7" },
+        }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: "a-adopt-7",
+      adopted: true,
+      memory: { ok: false, error: "runtime unreachable" },
+    });
   });
 });
 
