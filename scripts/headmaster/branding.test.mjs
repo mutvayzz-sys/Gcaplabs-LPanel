@@ -20,9 +20,7 @@ const importRepo = async (relative) => import(pathToFileURL(path.join(repoRoot, 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 test("parent origin parsing accepts only exact https origins", async () => {
-  const { parseHeadmasterParentOrigin } = await importRepo(
-    "frontend-dashboard/lib/headmaster.ts",
-  );
+  const { parseHeadmasterParentOrigin } = await importRepo("frontend-dashboard/lib/headmaster.ts");
   assert.equal(
     parseHeadmasterParentOrigin("https://headmaster.gcaplabs.com"),
     "https://headmaster.gcaplabs.com",
@@ -31,25 +29,39 @@ test("parent origin parsing accepts only exact https origins", async () => {
     parseHeadmasterParentOrigin("https://headmaster.gcaplabs.com:8443"),
     "https://headmaster.gcaplabs.com:8443",
   );
-  assert.equal(parseHeadmasterParentOrigin("http://headmaster.gcaplabs.com"), null, "http rejected");
+  assert.equal(
+    parseHeadmasterParentOrigin("http://headmaster.gcaplabs.com"),
+    null,
+    "http rejected",
+  );
   assert.equal(parseHeadmasterParentOrigin("https://*.gcaplabs.com"), null, "wildcard rejected");
-  assert.equal(parseHeadmasterParentOrigin("https://headmaster.gcaplabs.com/admin"), null, "path rejected");
-  assert.equal(parseHeadmasterParentOrigin("https://headmaster.gcaplabs.com/?x=1"), null, "query rejected");
+  assert.equal(
+    parseHeadmasterParentOrigin("https://headmaster.gcaplabs.com/admin"),
+    null,
+    "path rejected",
+  );
+  assert.equal(
+    parseHeadmasterParentOrigin("https://headmaster.gcaplabs.com/?x=1"),
+    null,
+    "query rejected",
+  );
   assert.equal(
     parseHeadmasterParentOrigin("https://user:pass@headmaster.gcaplabs.com"),
     null,
     "credentials rejected",
   );
-  assert.equal(parseHeadmasterParentOrigin("https://headmaster.gcaplabs.com/#f"), null, "fragment rejected");
+  assert.equal(
+    parseHeadmasterParentOrigin("https://headmaster.gcaplabs.com/#f"),
+    null,
+    "fragment rejected",
+  );
   assert.equal(parseHeadmasterParentOrigin(""), null, "empty rejected");
   assert.equal(parseHeadmasterParentOrigin(undefined), null, "undefined rejected");
   assert.equal(parseHeadmasterParentOrigin("nonsense"), null, "garbage rejected");
 });
 
 test("handshake accepts only nonce-bound presentation messages", async () => {
-  const { __headmasterTestHooks: hooks } = await importRepo(
-    "frontend-dashboard/lib/headmaster.ts",
-  );
+  const { __headmasterTestHooks: hooks } = await importRepo("frontend-dashboard/lib/headmaster.ts");
   const hello = hooks.parseInbound({ type: "headmaster:nora:hello", nonce: "a".repeat(32) });
   assert.equal(hello?.type, "headmaster:nora:hello");
 
@@ -64,14 +76,26 @@ test("handshake accepts only nonce-bound presentation messages", async () => {
   assert.equal(code?.type, "headmaster:nora:launch-code");
   assert.equal(code.code, "d".repeat(64));
 
-  assert.equal(hooks.parseInbound({ type: "headmaster:nora:token", token: "jwt" }), null, "token messages rejected");
+  assert.equal(
+    hooks.parseInbound({ type: "headmaster:nora:token", token: "jwt" }),
+    null,
+    "token messages rejected",
+  );
   assert.equal(
     hooks.parseInbound({ type: "headmaster:nora:navigate", url: "https://evil.example" }),
     null,
     "navigation rejected",
   );
-  assert.equal(hooks.parseInbound({ type: "headmaster:nora:hello", nonce: "short" }), null, "short nonce rejected");
-  assert.equal(hooks.parseInbound({ type: "headmaster:nora:hello" }), null, "missing nonce rejected");
+  assert.equal(
+    hooks.parseInbound({ type: "headmaster:nora:hello", nonce: "short" }),
+    null,
+    "short nonce rejected",
+  );
+  assert.equal(
+    hooks.parseInbound({ type: "headmaster:nora:hello" }),
+    null,
+    "missing nonce rejected",
+  );
   assert.equal(hooks.parseInbound({ hello: true }), null, "non-message objects rejected");
   assert.equal(
     hooks.parseInbound({ type: "headmaster:nora:launch-code", nonce: "c".repeat(32), code: "zz" }),
@@ -117,7 +141,16 @@ test("bridge library and theme tokens stay synchronized across dashboards", asyn
 
   const operatorTheme = await read("frontend-dashboard/styles/globals.css");
   const adminTheme = await read("admin-dashboard/styles/globals.css");
-  for (const token of ["#111310", "#f3f4ef", "#cfefa5", "#e5d8a7", "#edaa86", "--hm-surface: #191e16", "--hm-line: #414d37", "--hm-muted: #b7c2ac"]) {
+  for (const token of [
+    "#111310",
+    "#f3f4ef",
+    "#cfefa5",
+    "#e5d8a7",
+    "#edaa86",
+    "--hm-surface: #191e16",
+    "--hm-line: #414d37",
+    "--hm-muted: #b7c2ac",
+  ]) {
     assert.ok(operatorTheme.includes(token), `operator theme has ${token}`);
     assert.ok(adminTheme.includes(token), `admin theme has ${token}`);
   }
@@ -196,7 +229,11 @@ test("launch exchange backend wiring is present and fail-closed", async () => {
     /HEADMASTER_SESSION_TTL_SECONDS, 12 \* 60 \* 60/,
     "hm session lifetime is capped (bounded staleness)",
   );
-  assert.match(launch, /expiresIn: SESSION_TTL_SECONDS/, "JWT expiry matches the session record TTL");
+  assert.match(
+    launch,
+    /expiresIn: SESSION_TTL_SECONDS/,
+    "JWT expiry matches the session record TTL",
+  );
   assert.match(launch, /authorization_unavailable/, "storage outages fail closed");
   assert.match(launch, /registerPrivilegedSocket/, "live privileged sockets are tracked");
   assert.match(launch, /revokeHeadmasterSessions/, "revocation entry point exists");
@@ -218,7 +255,10 @@ test("launch exchange backend wiring is present and fail-closed", async () => {
   const internalMount = server.indexOf('app.use("/internal/headmaster"');
   const authWall = server.indexOf("app.use(authenticateToken)");
   assert.ok(internalMount > -1, "internal router mounted");
-  assert.ok(authWall > internalMount, "internal router sits before the auth wall (own bearer auth)");
+  assert.ok(
+    authWall > internalMount,
+    "internal router sits before the auth wall (own bearer auth)",
+  );
 
   const admin = await read("backend-api/routes/admin.ts");
   assert.match(admin, /nora_role_demoted/, "demotion revokes launched sessions");
@@ -227,6 +267,10 @@ test("launch exchange backend wiring is present and fail-closed", async () => {
   for (const stream of ["logStream", "execStream", "metricsStream"]) {
     const file = await read(`backend-api/${stream}.ts`);
     assert.match(file, /assertPrivilegedSocketSession/, `${stream}: upgrade guard present`);
-    assert.match(file, /registerPrivilegedSocket/, `${stream}: live socket registered for revocation`);
+    assert.match(
+      file,
+      /registerPrivilegedSocket/,
+      `${stream}: live socket registered for revocation`,
+    );
   }
 });

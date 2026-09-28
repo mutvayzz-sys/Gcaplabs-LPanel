@@ -56,6 +56,7 @@ function validateConfig(body) {
   if (
     typeof memory_gateway_url !== "string" ||
     memory_gateway_url.length > 2048 ||
+    // eslint-disable-next-line no-control-regex -- intentional: reject control characters in the URL
     /[\s\x00-\x1f]/.test(memory_gateway_url) ||
     !url ||
     !["http:", "https:"].includes(url.protocol) ||

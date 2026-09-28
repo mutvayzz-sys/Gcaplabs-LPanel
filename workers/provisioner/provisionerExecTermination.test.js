@@ -148,6 +148,40 @@ function processExists(pid) {
   }
 }
 
+// The wrapper and cleanup scripts confirm termination with `kill -0 -<pgid>`,
+// which still succeeds while a killed orphan sits unreaped as a zombie. Hosts
+// whose PID 1 never reaps orphans (some sandboxes, containers without an init)
+// therefore report "survived SIGKILL" for groups that are really dead. Probe
+// for that once and skip the orphan-dependent tests there instead of failing.
+function detectOrphanReaping() {
+  const probe = spawnSync(
+    "/bin/sh",
+    [
+      "-c",
+      [
+        "orphan=$(/bin/sh -c 'sleep 30 >/dev/null 2>&1 & echo $!')",
+        'kill -KILL "$orphan" 2>/dev/null',
+        "attempt=0",
+        'while [ "$attempt" -lt 20 ]; do state=$(awk \'{print $3}\' "/proc/$orphan/stat" 2>/dev/null) || break; [ -n "$state" ] || break; attempt=$((attempt + 1)); sleep 0.05; done',
+        "state=$(awk '{print $3}' \"/proc/$orphan/stat\" 2>/dev/null)",
+        '[ "$state" = "Z" ] && echo zombie || echo reaped',
+      ].join("\n"),
+    ],
+    { encoding: "utf8", timeout: 5000 },
+  );
+  return probe.stdout.trim() !== "zombie";
+}
+
+const ORPHAN_REAPING_SKIP = detectOrphanReaping()
+  ? false
+  : "host PID 1 does not reap orphaned processes, so killed process groups linger as zombies";
+
+// A login shell (`sh -lc`, used by the tracked runner) sources /etc/profile, which
+// on some hosts prints to stdout (e.g. nvm's profile.d hook). Capture that noise
+// so output assertions compare only what the tracked command itself wrote.
+const LOGIN_SHELL_STDOUT_NOISE =
+  spawnSync("/bin/sh", ["-lc", ":"], { encoding: "utf8" }).stdout || "";
+
 function processGroupExists(pgid) {
   try {
     process.kill(-pgid, 0);
@@ -223,97 +257,108 @@ test("tracked command builders require setsid, atomically publish state, and pre
 
     const result = runShell(trackedCommand);
     assert.equal(result.status, 0, result.stderr);
-    if (command.startsWith("printf")) assert.equal(result.stdout, "fast-output\n");
+    if (command.startsWith("printf"))
+      assert.equal(result.stdout, `${LOGIN_SHELL_STDOUT_NOISE}fast-output\n`);
     assert.equal(fs.existsSync(provisionerExecStateDir(commandId)), false);
   }
 });
 
-test("tracked wrapper removes leaderless descendants before reporting completion", () => {
-  const commandId = randomBytes(16).toString("hex");
-  const pgidFile = `/tmp/nora-tracked-pgid-${randomBytes(8).toString("hex")}`;
-  const command = `printf '%s\\n' "$$" > ${shellSingleQuote(pgidFile)}; (trap '' HUP TERM; while :; do sleep 0.05; done) & exit 0`;
-
-  try {
-    const result = runShell(buildTrackedProvisionerCommand(command, commandId), { timeout: 5000 });
-    assert.equal(result.status, 0, result.stderr);
-    const trackedPgid = Number(fs.readFileSync(pgidFile, "utf8").trim());
-    assert.equal(processGroupExists(trackedPgid), false);
-  } finally {
-    if (fs.existsSync(pgidFile)) {
-      const trackedPgid = Number(fs.readFileSync(pgidFile, "utf8").trim());
-      killProcessGroup(trackedPgid);
-    }
-    fs.rmSync(pgidFile, { force: true });
-    removeStateDir(commandId);
-  }
-});
-
-test("tracked wrapper retains evidence when SIGKILL or identity verification fails", () => {
-  const cases = [
-    {
-      name: "SIGKILL rejection",
-      expectedStatus: 74,
-      shellFault: [
-        "wait() { return 0; }",
-        'kill() { if [ "$1" = "-KILL" ]; then return 1; fi; command kill "$@"; }',
-      ].join("\n"),
-      command: "exec >/dev/null 2>&1; trap '' TERM; while :; do sleep 0.05; done",
-    },
-    {
-      name: "pre-TERM identity verification",
-      expectedStatus: 76,
-      shellFault: ["wait() { return 0; }", "awk() { printf '0 0\\n'; }"].join("\n"),
-    },
-  ];
-
-  for (const fault of cases) {
+test(
+  "tracked wrapper removes leaderless descendants before reporting completion",
+  { skip: ORPHAN_REAPING_SKIP },
+  () => {
     const commandId = randomBytes(16).toString("hex");
-    const stateDir = provisionerExecStateDir(commandId);
-    const termSignalFile = `/tmp/nora-wrapper-term-${randomBytes(8).toString("hex")}`;
-    const command =
-      fault.command ||
-      `exec >/dev/null 2>&1; trap 'printf term > ${shellSingleQuote(termSignalFile)}' TERM; while :; do sleep 0.05; done`;
-    let trackedPgid;
+    const pgidFile = `/tmp/nora-tracked-pgid-${randomBytes(8).toString("hex")}`;
+    const command = `printf '%s\\n' "$$" > ${shellSingleQuote(pgidFile)}; (trap '' HUP TERM; while :; do sleep 0.05; done) & exit 0`;
 
     try {
-      const result = runShell(
-        `${fault.shellFault}\n${buildTrackedProvisionerCommand(command, commandId)}`,
-        { timeout: 5000 },
-      );
-      assert.equal(result.status, fault.expectedStatus, `${fault.name}: ${result.stderr}`);
-      assert.match(
-        result.stderr,
-        new RegExp(
-          `NORA_EXEC_WRAPPER_TERMINATION_UNCONFIRMED:${commandId}:0:${fault.expectedStatus}`,
-        ),
-      );
-      assert.equal(fs.existsSync(stateDir), true, `${fault.name}: state directory was removed`);
-      assert.equal(
-        fs.readFileSync(path.join(stateDir, "termination"), "utf8"),
-        `nora-exec-termination-v1 ${commandId} 0 ${fault.expectedStatus}\n`,
-      );
-      const pidState = fs.readFileSync(path.join(stateDir, "pid"), "utf8").trim().split(" ");
-      trackedPgid = Number(pidState[2]);
-      assert.equal(processGroupExists(trackedPgid), true, `${fault.name}: group already exited`);
-      if (fault.expectedStatus === 76) {
-        assert.equal(
-          fs.existsSync(termSignalFile),
-          false,
-          "identity mismatch must be detected before SIGTERM",
-        );
-      }
-
-      const cleanup = runShell(buildProvisionerExecCleanupCommand(commandId), { timeout: 5000 });
-      assert.equal(cleanup.status, 0, `${fault.name}: ${cleanup.stderr}`);
-      assert.match(cleanup.stdout, new RegExp(`NORA_EXEC_CLEANUP_OK:${commandId}`));
-      assert.equal(fs.existsSync(stateDir), false);
+      const result = runShell(buildTrackedProvisionerCommand(command, commandId), {
+        timeout: 5000,
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const trackedPgid = Number(fs.readFileSync(pgidFile, "utf8").trim());
+      assert.equal(processGroupExists(trackedPgid), false);
     } finally {
-      killProcessGroup(trackedPgid);
-      fs.rmSync(termSignalFile, { force: true });
+      if (fs.existsSync(pgidFile)) {
+        const trackedPgid = Number(fs.readFileSync(pgidFile, "utf8").trim());
+        killProcessGroup(trackedPgid);
+      }
+      fs.rmSync(pgidFile, { force: true });
       removeStateDir(commandId);
     }
-  }
-});
+  },
+);
+
+test(
+  "tracked wrapper retains evidence when SIGKILL or identity verification fails",
+  { skip: ORPHAN_REAPING_SKIP },
+  () => {
+    const cases = [
+      {
+        name: "SIGKILL rejection",
+        expectedStatus: 74,
+        shellFault: [
+          "wait() { return 0; }",
+          'kill() { if [ "$1" = "-KILL" ]; then return 1; fi; command kill "$@"; }',
+        ].join("\n"),
+        command: "exec >/dev/null 2>&1; trap '' TERM; while :; do sleep 0.05; done",
+      },
+      {
+        name: "pre-TERM identity verification",
+        expectedStatus: 76,
+        shellFault: ["wait() { return 0; }", "awk() { printf '0 0\\n'; }"].join("\n"),
+      },
+    ];
+
+    for (const fault of cases) {
+      const commandId = randomBytes(16).toString("hex");
+      const stateDir = provisionerExecStateDir(commandId);
+      const termSignalFile = `/tmp/nora-wrapper-term-${randomBytes(8).toString("hex")}`;
+      const command =
+        fault.command ||
+        `exec >/dev/null 2>&1; trap 'printf term > ${shellSingleQuote(termSignalFile)}' TERM; while :; do sleep 0.05; done`;
+      let trackedPgid;
+
+      try {
+        const result = runShell(
+          `${fault.shellFault}\n${buildTrackedProvisionerCommand(command, commandId)}`,
+          { timeout: 5000 },
+        );
+        assert.equal(result.status, fault.expectedStatus, `${fault.name}: ${result.stderr}`);
+        assert.match(
+          result.stderr,
+          new RegExp(
+            `NORA_EXEC_WRAPPER_TERMINATION_UNCONFIRMED:${commandId}:0:${fault.expectedStatus}`,
+          ),
+        );
+        assert.equal(fs.existsSync(stateDir), true, `${fault.name}: state directory was removed`);
+        assert.equal(
+          fs.readFileSync(path.join(stateDir, "termination"), "utf8"),
+          `nora-exec-termination-v1 ${commandId} 0 ${fault.expectedStatus}\n`,
+        );
+        const pidState = fs.readFileSync(path.join(stateDir, "pid"), "utf8").trim().split(" ");
+        trackedPgid = Number(pidState[2]);
+        assert.equal(processGroupExists(trackedPgid), true, `${fault.name}: group already exited`);
+        if (fault.expectedStatus === 76) {
+          assert.equal(
+            fs.existsSync(termSignalFile),
+            false,
+            "identity mismatch must be detected before SIGTERM",
+          );
+        }
+
+        const cleanup = runShell(buildProvisionerExecCleanupCommand(commandId), { timeout: 5000 });
+        assert.equal(cleanup.status, 0, `${fault.name}: ${cleanup.stderr}`);
+        assert.match(cleanup.stdout, new RegExp(`NORA_EXEC_CLEANUP_OK:${commandId}`));
+        assert.equal(fs.existsSync(stateDir), false);
+      } finally {
+        killProcessGroup(trackedPgid);
+        fs.rmSync(termSignalFile, { force: true });
+        removeStateDir(commandId);
+      }
+    }
+  },
+);
 
 test("Remote Docker timeout invokes only fixed cleanup and confirms an already-ended stream", async () => {
   const calls = [];
@@ -849,54 +894,58 @@ test("missing, malformed, and reused-leader PID state never signal another proce
   }
 });
 
-test("cleanup terminates verified descendants after their original group leader exits", async () => {
-  const commandId = randomBytes(16).toString("hex");
-  const stateDir = provisionerExecStateDir(commandId);
-  const nonce = randomBytes(8).toString("hex");
-  const childFile = `/tmp/nora-leaderless-child-${nonce}`;
-  const exitGate = `/tmp/nora-leaderless-gate-${nonce}`;
-  const leader = spawn(
-    "/bin/sh",
-    [
-      "-c",
-      `trap '' HUP; (trap '' HUP TERM; while :; do sleep 0.05; done) & printf '%s\\n' "$!" > ${shellSingleQuote(childFile)}; while [ ! -f ${shellSingleQuote(exitGate)} ]; do sleep 0.01; done; exit 0`,
-    ],
-    { detached: true, stdio: "ignore" },
-  );
-  let descendantPid;
-
-  try {
-    const leaderIdentity = readProcIdentity(leader.pid);
-    assert.equal(leaderIdentity.pgrp, leader.pid);
-    await waitForFile(childFile);
-    descendantPid = Number(fs.readFileSync(childFile, "utf8").trim());
-    assert.equal(readProcIdentity(descendantPid).pgrp, leader.pid);
-
-    fs.writeFileSync(exitGate, "exit\n");
-    await waitForChildExit(leader);
-    assert.equal(processExists(leader.pid), false);
-    assert.equal(processGroupExists(leader.pid), true);
-
-    fs.mkdirSync(stateDir, { mode: 0o700 });
-    fs.writeFileSync(
-      path.join(stateDir, "pid"),
-      `nora-exec-v1 ${commandId} ${leader.pid} ${leaderIdentity.startTime}\n`,
-      { mode: 0o600 },
+test(
+  "cleanup terminates verified descendants after their original group leader exits",
+  { skip: ORPHAN_REAPING_SKIP },
+  async () => {
+    const commandId = randomBytes(16).toString("hex");
+    const stateDir = provisionerExecStateDir(commandId);
+    const nonce = randomBytes(8).toString("hex");
+    const childFile = `/tmp/nora-leaderless-child-${nonce}`;
+    const exitGate = `/tmp/nora-leaderless-gate-${nonce}`;
+    const leader = spawn(
+      "/bin/sh",
+      [
+        "-c",
+        `trap '' HUP; (trap '' HUP TERM; while :; do sleep 0.05; done) & printf '%s\\n' "$!" > ${shellSingleQuote(childFile)}; while [ ! -f ${shellSingleQuote(exitGate)} ]; do sleep 0.01; done; exit 0`,
+      ],
+      { detached: true, stdio: "ignore" },
     );
-    const cleanup = runShell(buildProvisionerExecCleanupCommand(commandId), { timeout: 5000 });
-    assert.equal(cleanup.status, 0, cleanup.stderr);
-    assert.match(cleanup.stdout, new RegExp(`NORA_EXEC_CLEANUP_OK:${commandId}`));
-    await waitFor(
-      () => !processGroupExists(leader.pid),
-      "leaderless tracked descendants survived cleanup",
-    );
-  } finally {
-    killProcessGroup(leader.pid);
-    fs.rmSync(childFile, { force: true });
-    fs.rmSync(exitGate, { force: true });
-    removeStateDir(commandId);
-  }
-});
+    let descendantPid;
+
+    try {
+      const leaderIdentity = readProcIdentity(leader.pid);
+      assert.equal(leaderIdentity.pgrp, leader.pid);
+      await waitForFile(childFile);
+      descendantPid = Number(fs.readFileSync(childFile, "utf8").trim());
+      assert.equal(readProcIdentity(descendantPid).pgrp, leader.pid);
+
+      fs.writeFileSync(exitGate, "exit\n");
+      await waitForChildExit(leader);
+      assert.equal(processExists(leader.pid), false);
+      assert.equal(processGroupExists(leader.pid), true);
+
+      fs.mkdirSync(stateDir, { mode: 0o700 });
+      fs.writeFileSync(
+        path.join(stateDir, "pid"),
+        `nora-exec-v1 ${commandId} ${leader.pid} ${leaderIdentity.startTime}\n`,
+        { mode: 0o600 },
+      );
+      const cleanup = runShell(buildProvisionerExecCleanupCommand(commandId), { timeout: 5000 });
+      assert.equal(cleanup.status, 0, cleanup.stderr);
+      assert.match(cleanup.stdout, new RegExp(`NORA_EXEC_CLEANUP_OK:${commandId}`));
+      await waitFor(
+        () => !processGroupExists(leader.pid),
+        "leaderless tracked descendants survived cleanup",
+      );
+    } finally {
+      killProcessGroup(leader.pid);
+      fs.rmSync(childFile, { force: true });
+      fs.rmSync(exitGate, { force: true });
+      removeStateDir(commandId);
+    }
+  },
+);
 
 test("cleanup kills a TERM-ignoring tracked group while an unrelated group survives", async () => {
   const commandId = randomBytes(16).toString("hex");

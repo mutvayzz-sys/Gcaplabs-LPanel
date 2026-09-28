@@ -199,9 +199,7 @@ describe("provisioning runtime/gateway contracts", () => {
       address: "169.254.169.254",
       port: 80,
     });
-    const fetchImpl = jest
-      .fn()
-      .mockRejectedValueOnce(new TypeError("fetch failed", { cause }));
+    const fetchImpl = jest.fn().mockRejectedValueOnce(new TypeError("fetch failed", { cause }));
 
     const result = await waitForHttpReady("http://agent.internal:9090/health", {
       attempts: 1,

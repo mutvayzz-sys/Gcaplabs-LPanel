@@ -269,7 +269,12 @@ class HermesBackend extends DockerBackend {
       // s6 initialization runs before the managed .env is sourced. Only
       // server-owned, nonsecret memory identity belongs in the Docker env.
       ...Object.fromEntries(
-        ["HEADMASTER_OWNER_ID", "HEADMASTER_WORKSPACE_ID", "HEADMASTER_MEMORY_BANK_ID", "HEADMASTER_MEMORY_GATEWAY_URL"]
+        [
+          "HEADMASTER_OWNER_ID",
+          "HEADMASTER_WORKSPACE_ID",
+          "HEADMASTER_MEMORY_BANK_ID",
+          "HEADMASTER_MEMORY_GATEWAY_URL",
+        ]
           .filter((key) => typeof env?.[key] === "string" && env[key])
           .map((key) => [key, env[key]]),
       ),

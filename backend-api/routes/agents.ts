@@ -2244,7 +2244,10 @@ router.post("/deploy", async (req, res) => {
             }),
     );
 
-    const headmaster = require("../headmasterConfig").deploymentConfig(requestBody, runtimeFields.runtime_family);
+    const headmaster = require("../headmasterConfig").deploymentConfig(
+      requestBody,
+      runtimeFields.runtime_family,
+    );
     const result = await insertAgentForRequest(
       req,
       `INSERT INTO agents(

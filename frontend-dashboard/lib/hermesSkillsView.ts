@@ -10,11 +10,7 @@
 // data unmodified.
 
 export type HermesSkillStatus =
-  | "healthy"
-  | "missing_runtime"
-  | "orphaned_runtime"
-  | "pending_install"
-  | "pending_delete";
+  "healthy" | "missing_runtime" | "orphaned_runtime" | "pending_install" | "pending_delete";
 
 export type HermesSkillSummary = {
   ref: string;
