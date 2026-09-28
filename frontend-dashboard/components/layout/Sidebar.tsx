@@ -110,9 +110,7 @@ export default function Sidebar({
         {!collapsed && (
           <div className="hm-brand flex flex-col min-w-0">
             <span className="hm-brand-name">headmaster</span>
-            <span className="hm-brand-caption">
-              {t("Deploy intelligence anywhere.")}
-            </span>
+            <span className="hm-brand-caption">{t("Deploy intelligence anywhere.")}</span>
           </div>
         )}
         {/* Mobile close button */}

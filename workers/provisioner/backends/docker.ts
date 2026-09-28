@@ -330,7 +330,11 @@ class DockerBackend extends ProvisionerBackend {
         await this.docker.getNetwork(override).inspect();
       } catch {
         try {
-          await this.docker.createNetwork({ Name: override, Driver: "bridge", CheckDuplicate: true });
+          await this.docker.createNetwork({
+            Name: override,
+            Driver: "bridge",
+            CheckDuplicate: true,
+          });
           console.log(`[docker] Created agent network ${override}`);
         } catch (error) {
           console.warn(`[docker] Could not ensure agent network ${override}: ${error.message}`);

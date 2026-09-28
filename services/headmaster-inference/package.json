@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "commonjs",
-  "engines": { "node": ">=24 <25" },
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "start": "tsx server.ts",
     "test": "node --test *.test.mjs"
