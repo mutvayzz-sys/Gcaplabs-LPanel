@@ -801,6 +801,66 @@ print(json.dumps({
 }
 
 /**
+ * Stamp the runtime's active memory provider directly into its on-disk
+ * config.yaml (`memory.provider`), the same field Hermes's own
+ * `PUT /api/memory/provider` writes. Bypasses that route's readiness gate
+ * because the caller (Headmaster provisioning) already knows the provider is
+ * meant to be active -- the memory-gateway env vars that make Hindsight
+ * discoverable are stamped separately via managed config.
+ *
+ * @param {Object} agent - Hermes agent whose memory provider should be set.
+ * @param {string} provider - Provider name, e.g. "hindsight".
+ * @returns {Promise<Object>} Runtime helper result.
+ */
+async function persistHermesMemoryProviderConfig(agent, provider) {
+  const payloadJson = JSON.stringify({ provider: String(provider || "").trim() });
+  const script = `
+import json
+import grp
+import os
+import pwd
+from pathlib import Path
+
+from hermes_cli.config import get_config_path, load_config, save_config
+${HERMES_REPAIR_SURROGATES_PY}
+payload = json.loads(${JSON.stringify(payloadJson)})
+provider = str(payload.get("provider") or "").strip()
+config = repair_surrogates(load_config() or {})
+
+mutated = False
+if provider:
+    memory = config.get("memory")
+    memory = dict(memory) if isinstance(memory, dict) else {}
+    mutated = memory.get("provider") != provider
+    memory["provider"] = provider
+    config["memory"] = memory
+
+config_path = Path(get_config_path())
+if mutated:
+    save_config(config)
+    try:
+        user = pwd.getpwnam("hermes")
+        group = grp.getgrnam("hermes")
+        os.chown(config_path, user.pw_uid, group.gr_gid)
+    except Exception:
+        pass
+    try:
+        config_path.chmod(0o600)
+    except Exception:
+        pass
+
+print(json.dumps({
+    "ok": True,
+    "mutated": mutated,
+    "provider": provider,
+    "configPath": str(config_path),
+}))
+`;
+
+  return runHermesPythonJson(agent, script, { timeout: 30000 });
+}
+
+/**
  * Replay durable Hermes model and channel state into a provisioned runtime. When
  * requested, an explicit restart occurs only after every write succeeds; Kubernetes
  * patches may already trigger rollouts, and earlier writes are not rolled back on failure.
@@ -1393,6 +1453,7 @@ module.exports = {
   definitionForChannelType,
   getPersistedHermesState,
   listHermesChannels,
+  persistHermesMemoryProviderConfig,
   persistHermesModelConfig,
   readHermesRuntimeSnapshot,
   repairHermesAgentConfig,
