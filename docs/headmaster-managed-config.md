@@ -58,5 +58,5 @@ containers are stopped and retained, never deleted.
 The seven new columns use append-only startup migrations, mirrored in
 `db_schema.sql`. Release only from a merged commit after live fixture validation.
 Production migration and Nora deployment require separate owner approval; an
-alpha merge does not authorize deployment. Kubernetes live acceptance requires a
+a merge to `main` does not authorize deployment. Kubernetes live acceptance requires a
 Kubernetes fixture and remains distinct from unit coverage of its allowlist.
