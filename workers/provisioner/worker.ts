@@ -4368,7 +4368,8 @@ const worker = new Worker(
         `SELECT image, template_payload, sandbox_type, backend_type, runtime_family,
             deploy_target, execution_target_id, sandbox_profile, gateway_token, mcp_servers, status,
             container_id, container_name, host, runtime_host, runtime_port, gateway_host,
-            gateway_port, gateway_host_port, dashboard_port, user_id
+            gateway_port, gateway_host_port, dashboard_port, user_id,
+            ${require("../../backend-api/headmasterConfig").HEADMASTER_AGENT_COLUMNS.join(", ")}
        FROM agents
       WHERE id = $1`,
         [id],

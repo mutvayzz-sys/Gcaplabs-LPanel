@@ -8,6 +8,8 @@ const FIELDS = Object.freeze({
   HEADMASTER_MEMORY_GATEWAY_URL: "headmaster_memory_gateway_url",
 });
 const HEADMASTER_ENV_NAMES = Object.freeze(Object.keys(FIELDS));
+// Columns that must be selected whenever an agents row is handed to headmasterEnv().
+const HEADMASTER_AGENT_COLUMNS = Object.freeze(Object.values(FIELDS));
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function configError(message, statusCode = 400) {
@@ -181,6 +183,7 @@ async function updateManagedConfig(agent, body, { retry = false, apiKeyWorkspace
 
 module.exports = {
   HEADMASTER_ENV_NAMES,
+  HEADMASTER_AGENT_COLUMNS,
   headmasterEnv,
   managedConfigStatus,
   validateConfig,
