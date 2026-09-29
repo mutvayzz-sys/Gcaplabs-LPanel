@@ -210,3 +210,27 @@ test("deployment metadata is complete, private and bound to the same immutable i
     ),
   ).toThrow();
 });
+
+test("the deploy worker selects every agents column that headmasterEnv reads", () => {
+  // Regression: the worker passed its agents row to headmasterEnv() but the SELECT omitted the
+  // headmaster_* columns, so new Hermes containers were created without HEADMASTER_* env and the
+  // s6 memory bootstrap (which runs before the managed .env is sourced) never configured Hindsight.
+  const fs = require("fs");
+  const path = require("path");
+  const {
+    headmasterEnv,
+    HEADMASTER_AGENT_COLUMNS,
+    HEADMASTER_ENV_NAMES,
+  } = require("../headmasterConfig");
+  const selectedRow = Object.fromEntries(
+    HEADMASTER_AGENT_COLUMNS.map((column) => [column, "value"]),
+  );
+  const env = headmasterEnv(selectedRow);
+  expect(Object.keys(env).filter((key) => env[key])).toEqual(HEADMASTER_ENV_NAMES);
+  const worker = fs.readFileSync(
+    path.join(__dirname, "../../workers/provisioner/worker.ts"),
+    "utf8",
+  );
+  expect(worker).toContain("HEADMASTER_AGENT_COLUMNS.join");
+  expect(worker).toContain("headmasterEnv(agentRow)");
+});
