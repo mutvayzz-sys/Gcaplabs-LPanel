@@ -4,7 +4,7 @@
 
 Reviewed the LPanel documentation and implementation at commit 9f33fa4 (30 September 2026). The assigned worktree is based on the repository's main branch. CLAUDE.md was read before editing; this checkout has no root AGENTS.md. The source snapshot is frozen for this task.
 
-The audit covered README.md; docs/docs.json; docs/introduction.mdx, docs/quickstart.mdx and docs/self-hosting.mdx; the three docs/headmaster-*.md pages; docs/README.md; and the Headmaster integration, managed configuration and inference implementation. The wider inherited concepts, guides, API, support, comparison and configuration pages were checked for Headmaster-specific navigation or incoming links. They do not describe Headmaster behavior and are no longer presented as Headmaster help.
+The audit covered README.md; docs/introduction.mdx, docs/quickstart.mdx and docs/self-hosting.mdx; the three docs/headmaster-*.md pages; docs/README.md; and the Headmaster integration, managed configuration and inference implementation. The wider inherited concepts, guides, API, support, comparison and configuration pages were checked for Headmaster-specific navigation or incoming links. They do not describe Headmaster behavior. The existing docs.json navigation is outside this Markdown-only change, so those inherited routes remain a publication issue.
 
 ## Current documentation claims
 
@@ -12,7 +12,7 @@ The audit covered README.md; docs/docs.json; docs/introduction.mdx, docs/quickst
 - The quickstart and self-hosting pages instruct readers to clone and run a different upstream repository, and describe its local demo and deployment choices.
 - The three Headmaster pages mix implementation contracts with public guidance. They include internal service routes, deployment state, secret-related configuration names, host details, and dated build evidence.
 - The managed-configuration page says a model selected from another provider is lost on the next resync. The compatibility page simultaneously says the Headmaster integration is still in progress and describes later deployment state.
-- The original Mintlify navigation did not include any Headmaster page. It exposed the inherited documentation catalog. Removing pages from Mintlify navigation does not prevent direct access, so the old route groups also need redirects.
+- The original Mintlify navigation did not include any Headmaster page. It exposed the inherited documentation catalog. Removing pages from navigation does not prevent direct access; navigation and legacy-route remediation remain unresolved because docs.json is outside this change's Markdown-only scope.
 
 ## Code and history evidence
 
@@ -27,9 +27,9 @@ The audit covered README.md; docs/docs.json; docs/introduction.mdx, docs/quickst
 - Replaced the root README with a concise Headmaster control-panel repository overview and a link to the ecosystem map.
 - Reworked the introduction, quickstart and self-hosting pages to describe Headmaster paths without repeating inherited setup instructions. Customer navigation, deployment, and publication details not established by this source snapshot carry TODO(verify) comments.
 - Rewrote the Headmaster integration, managed-configuration and compatibility pages in plain Headmaster language. Kept source-backed behavior and removed stale rollout narratives and internal deployment details.
-- Added a Cloud model tiers page and updated docs.json so the Headmaster pages are discoverable.
-- Added redirects from the retired inherited API, comparison, concepts, configuration, guides and support routes. The old source files remain in place; these redirects keep prior URLs from opening the inherited content directly.
+- Added Cloud model tier guidance to the existing compatibility page, so no new documentation route is introduced.
+- Updated Markdown links to point to existing Headmaster pages. The Mintlify navigation and inherited direct URLs still require a separate documentation-configuration change.
 
 ## Limits
 
-This is a source and Git-history review only. It does not establish current customer-facing deployment state, publication configuration, redirect behavior, static-asset exposure, or end-to-end acceptance. No tests or live checks are in scope. TODO(verify) comments identify those limits where the revised pages might otherwise imply availability.
+This is a source and Git-history review only. It does not establish current customer-facing deployment state, publication configuration, legacy route access, or end-to-end acceptance. No tests or live checks are in scope. TODO(verify) comments identify those limits where the revised pages might otherwise imply availability.

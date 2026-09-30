@@ -18,7 +18,7 @@ The Headmaster desktop app and account website live in separate repositories. Se
 - [Product overview](docs/introduction.mdx)
 - [Quickstart](docs/quickstart.mdx)
 - [Administrator access](docs/headmaster-integration.md)
-- [Cloud model tiers](docs/headmaster-cloud-inference.mdx)
+- [Cloud model tiers and compatibility](docs/headmaster-compatibility.md#cloud-model-tiers)
 - [Managed runtime configuration](docs/headmaster-managed-config.md)
 - [Compatibility notes](docs/headmaster-compatibility.md)
 - [Self-hosting status](docs/self-hosting.mdx)

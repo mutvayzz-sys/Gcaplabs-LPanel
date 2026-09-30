@@ -1,64 +1,208 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "name": "Headmaster",
-  "description": "Licence and Cloud control panel services for Headmaster-managed runtimes.",
+  "name": "Nora",
+  "description": "Self-hosted control plane for operating OpenClaw and Hermes agents on Docker and Kubernetes, with experimental Remote Docker and Proxmox placement.",
   "seo": {
     "metatags": {
-      "keywords": "Headmaster, licence panel, Cloud control panel, managed runtimes"
+      "keywords": "self-hosted AI agents, OpenClaw, Hermes, Docker, Kubernetes, Remote Docker, Proxmox"
     }
   },
   "theme": "mint",
   "logo": {
-    "light": "/logo/headmaster.svg",
-    "dark": "/logo/headmaster.svg"
+    "light": "/logo/light.png",
+    "dark": "/logo/dark.png"
   },
   "colors": {
-    "primary": "#1A4D2E",
-    "light": "#F7F7F5",
-    "dark": "#1A4D2E"
+    "primary": "#0e7490",
+    "light": "#8ae6ff",
+    "dark": "#0b5f87"
   },
-  "favicon": "/logo/headmaster.svg",
-  "redirects": [
-    { "source": "/api", "destination": "/headmaster-compatibility" },
-    { "source": "/api/:slug*", "destination": "/headmaster-compatibility" },
-    { "source": "/compare", "destination": "/introduction" },
-    { "source": "/concepts", "destination": "/introduction" },
-    { "source": "/concepts/:slug*", "destination": "/introduction" },
-    { "source": "/configuration", "destination": "/introduction" },
-    { "source": "/configuration/:slug*", "destination": "/introduction" },
-    { "source": "/guides", "destination": "/introduction" },
-    { "source": "/guides/:slug*", "destination": "/introduction" },
-    { "source": "/headmaster-build-manifest.json", "destination": "/headmaster-compatibility" },
-    { "source": "/support", "destination": "/quickstart" },
-    { "source": "/support/:slug*", "destination": "/quickstart" }
-  ],
+  "favicon": "/favicon.png",
   "navbar": {
     "primary": {
       "type": "github",
-      "href": "https://github.com/mutvayzz-sys/Gcaplabs-LPanel"
+      "href": "https://github.com/solomon2773/nora"
     }
   },
   "navigation": {
     "groups": [
       {
         "group": "Getting started",
-        "pages": ["introduction", "quickstart"]
+        "pages": ["introduction", "compare", "quickstart", "self-hosting"]
       },
       {
-        "group": "Cloud control panel",
+        "group": "Concepts",
         "pages": [
-          "headmaster-cloud-inference",
-          "headmaster-integration"
+          "concepts/architecture",
+          "concepts/security",
+          "concepts/agents",
+          "concepts/runtimes",
+          "concepts/workspaces",
+          "concepts/llm-providers",
+          "concepts/agent-hub"
         ]
       },
       {
-        "group": "Contributor reference",
+        "group": "Configuration",
         "pages": [
-          "headmaster-managed-config",
-          "headmaster-compatibility",
-          "self-hosting"
+          "configuration/environment-variables",
+          "configuration/platform-modes",
+          {
+            "group": "Provisioner backends",
+            "pages": [
+              "configuration/provisioner-backends",
+              "configuration/provisioner-backends/docker",
+              "configuration/provisioner-backends/remote-docker",
+              "configuration/provisioner-backends/proxmox",
+              {
+                "group": "Kubernetes",
+                "pages": [
+                  "configuration/provisioner-backends/kubernetes",
+                  "configuration/provisioner-backends/kubernetes-kind",
+                  "configuration/provisioner-backends/kubernetes-k3s",
+                  "configuration/provisioner-backends/kubernetes-aks",
+                  "configuration/provisioner-backends/kubernetes-gke",
+                  "configuration/provisioner-backends/kubernetes-eks"
+                ]
+              }
+            ]
+          },
+          "configuration/tls-domains"
         ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/deploy-agent",
+          "guides/remote-docker",
+          "guides/manage-providers",
+          "guides/integrations",
+          {
+            "group": "Per-provider integrations",
+            "pages": [
+              "guides/integrations/index",
+              "guides/integrations/airtable",
+              "guides/integrations/algolia",
+              "guides/integrations/anthropic",
+              "guides/integrations/asana",
+              "guides/integrations/aws",
+              "guides/integrations/azure",
+              "guides/integrations/bitbucket",
+              "guides/integrations/circleci",
+              "guides/integrations/clickup",
+              "guides/integrations/confluence",
+              "guides/integrations/datadog",
+              "guides/integrations/digitalocean",
+              "guides/integrations/discord",
+              "guides/integrations/docker-hub",
+              "guides/integrations/dropbox",
+              "guides/integrations/elasticsearch",
+              "guides/integrations/email",
+              "guides/integrations/facebook",
+              "guides/integrations/firebase",
+              "guides/integrations/gcp",
+              "guides/integrations/github",
+              "guides/integrations/gitlab",
+              "guides/integrations/google-analytics",
+              "guides/integrations/google-calendar",
+              "guides/integrations/google-drive",
+              "guides/integrations/google-sheets",
+              "guides/integrations/grafana",
+              "guides/integrations/hubspot",
+              "guides/integrations/huggingface",
+              "guides/integrations/instagram",
+              "guides/integrations/jenkins",
+              "guides/integrations/jira",
+              "guides/integrations/kubernetes",
+              "guides/integrations/linear",
+              "guides/integrations/linkedin",
+              "guides/integrations/make",
+              "guides/integrations/mixpanel",
+              "guides/integrations/monday",
+              "guides/integrations/mongodb",
+              "guides/integrations/n8n",
+              "guides/integrations/notion",
+              "guides/integrations/openai",
+              "guides/integrations/pagerduty",
+              "guides/integrations/paypal",
+              "guides/integrations/pinecone",
+              "guides/integrations/pipedrive",
+              "guides/integrations/postgresql",
+              "guides/integrations/redis",
+              "guides/integrations/s3",
+              "guides/integrations/salesforce",
+              "guides/integrations/segment",
+              "guides/integrations/sendgrid",
+              "guides/integrations/sentry",
+              "guides/integrations/shopify",
+              "guides/integrations/slack",
+              "guides/integrations/stripe",
+              "guides/integrations/supabase",
+              "guides/integrations/teams",
+              "guides/integrations/telegram",
+              "guides/integrations/terraform",
+              "guides/integrations/trello",
+              "guides/integrations/twilio",
+              "guides/integrations/twitter",
+              "guides/integrations/vercel",
+              "guides/integrations/weaviate",
+              "guides/integrations/wecom",
+              "guides/integrations/woocommerce",
+              "guides/integrations/zapier",
+              "guides/integrations/zendesk"
+            ]
+          },
+          "guides/channels",
+          "guides/cli",
+          "guides/mcp-server",
+          "guides/monitoring",
+          "guides/opentelemetry",
+          "guides/scheduled-agents",
+          "guides/doctor",
+          "guides/alert-rules",
+          "guides/backups",
+          "guides/upgrades",
+          {
+            "group": "Agent Hub",
+            "pages": [
+              "guides/agent-hub",
+              "guides/echo-personal-branding",
+              "guides/iris-instagram",
+              "guides/remy-customer-support",
+              "guides/scout-lead-outreach",
+              "guides/penny-invoice-followup",
+              "guides/cadence-email-nurture",
+              "guides/dex-document-extractor",
+              "guides/mercer-client-intelligence",
+              "guides/signal-market-signal",
+              "guides/atlas-chief-of-staff",
+              "guides/sentry-communication-intelligence"
+            ]
+          },
+          "guides/nemoclaw"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api/overview",
+          "api/authentication",
+          "api/workspaces",
+          "api/agents",
+          "api/llm-providers",
+          "api/integrations",
+          "api/channels",
+          "api/alert-rules",
+          "api/monitoring"
+        ]
+      },
+      {
+        "group": "Support",
+        "pages": ["support/faq", "support/troubleshooting", "support/contact"]
       }
     ]
+  },
+  "footerSocials": {
+    "github": "https://github.com/solomon2773/nora"
   }
 }
