@@ -36,7 +36,10 @@
     },
     "headmaster_supabase_migrations": {
       "applied_through": "20260923021624",
-      "unapplied_drafts": ["20260923030644", "20260923030810"]
+      "unapplied_drafts": [
+        "20260923030644",
+        "20260923030810"
+      ]
     }
   },
   "images": {
@@ -70,5 +73,22 @@
     "commit_created": false,
     "push_created": false,
     "disposable_hermes_lifecycle_acceptance": "pending"
+  },
+  "production_2026_09_30": {
+    "observed_at": "2026-09-30",
+    "note": "Operator-run production state after plan step 3. The candidate block above and the N0 status remain a historical record of the 2026-09-23 preparation; this block is what runs now.",
+    "runtime_image": "nora-headmaster-memory:1de5b492",
+    "runtime_source": "mutvayzz-sys/gcaplabs-headmastercore main 1de5b492c0905b7e31b20e6e8e70b1fe01da8ad5",
+    "worker": {
+      "image": "headmaster-nora/worker-provisioner:a318c1e7e6bb",
+      "image_id_prefix": "sha256:e7253b71041c",
+      "source_commit": "a318c1e7e6bbd7d52917b9a5fedd118a5a66d9be",
+      "rollback_image": "headmaster-nora/worker-provisioner:e72773f2c08c"
+    },
+    "api": {
+      "image": "headmaster-nora/backend-api:1bae078ad99d",
+      "note": "not rebuilt for the worker fix; the worker image bundles its own copy of backend-api"
+    },
+    "api_and_worker_same_commit": false
   }
 }
