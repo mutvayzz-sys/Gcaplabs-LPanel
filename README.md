@@ -2,7 +2,7 @@
 
 This repository contains the Headmaster licence panel and Cloud control-plane services. It implements administrator access, managed runtime identity and configuration, and account-based model routing.
 
-The Headmaster desktop app and account website live in separate repositories. See the [ecosystem map](https://github.com/mutvayzz-sys/gcaplabs-desktop/blob/main/ECOSYSTEM.md) for how the services fit together.
+The Headmaster desktop app and account website live in separate repositories. See the [ecosystem map](https://github.com/mutvayzz-sys/gcaplabs-desktop/blob/beta/ECOSYSTEM.md) for how the services fit together.
 
 ## Repository map
 
