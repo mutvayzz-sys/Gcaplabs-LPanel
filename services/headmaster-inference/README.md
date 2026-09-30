@@ -56,6 +56,17 @@ Required private settings:
 - `HEADMASTER_INFERENCE_ASSIGNMENT_TTL_MS`: optional assignment cache lifetime
   in milliseconds, default 30000, clamped to 1000..300000.
 
+Default assignment (Lite/Pro/Max for every approved account): set both
+`HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID` (the operator's Nora user UUID) and
+`HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID` (the `llm_providers` row UUID that
+backs the tiers), or neither. When set, an owner with no assignment row resolves
+to that pair, so a newly approved account can chat on the Headmaster tiers with no
+admin step. Admission signs a relay assertion only for an approved account, so
+this does not open the relay to anyone else. A row still wins over the default, an
+explicitly disabled row (`enabled = false`) still denies, and a lookup failure never
+falls back to the default. Leaving both unset keeps the old rule that absence of a
+row denies.
+
 TTL and revocation semantics:
 
 - The relay caches the last successful assignment read per owner for at most
@@ -66,7 +77,7 @@ TTL and revocation semantics:
   (`headmaster-inference assignment revoked`) so an operator can tell a
   disabled owner apart from one who never had an assignment.
 - Absence of a row denies access (`provider_mapping_unavailable`); assignment
-  rows are never auto-created per auth user. Any lookup failure (network,
+  rows are never auto-created per auth user (unless the default assignment above is configured, which applies to a missing row without creating one). Any lookup failure (network,
   non-2xx, malformed or duplicate rows, timeout) also denies — no stale or
   negative fallback is served.
 - The lookup deadline (`HEADMASTER_INFERENCE_ASSIGNMENT_TIMEOUT_MS`, default

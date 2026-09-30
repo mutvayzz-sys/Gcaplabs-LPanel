@@ -122,6 +122,33 @@ function normalizeAssignmentRow(row, ownerId) {
   });
 }
 
+function normalizeDefaultAssignment(value) {
+  if (value === null || value === undefined) return null;
+  const noraUserId = String(value.noraUserId ?? "").toLowerCase();
+  const providerId = String(value.providerId ?? "").toLowerCase();
+  if (!OWNER_UUID.test(noraUserId) || !OWNER_UUID.test(providerId)) {
+    throw assignmentError(
+      "headmaster inference default assignment must be a Nora user UUID and a provider UUID",
+      "assignment_config_invalid",
+    );
+  }
+  return Object.freeze({ noraUserId, providerId });
+}
+
+// HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID and _PROVIDER_ID together, or neither.
+export function defaultAssignmentFromEnv(env = process.env) {
+  const noraUserId = String(env.HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID || "").trim();
+  const providerId = String(env.HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID || "").trim();
+  if (!noraUserId && !providerId) return null;
+  if (!noraUserId || !providerId) {
+    throw assignmentError(
+      "HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID and HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID must be set together",
+      "assignment_config_invalid",
+    );
+  }
+  return { noraUserId, providerId };
+}
+
 export function createSupabaseAssignmentResolver({
   supabaseUrl,
   serviceRoleKey,
@@ -130,7 +157,14 @@ export function createSupabaseAssignmentResolver({
   ttlMs = DEFAULT_ASSIGNMENT_TTL_MS,
   timeoutMs = DEFAULT_ASSIGNMENT_TIMEOUT_MS,
   logger = quietLogger,
+  defaultAssignment = null,
 } = {}) {
+  // Optional reference-only default (Nora user + provider row) for an owner with no
+  // assignment row at all. Admission signs a relay assertion only for an approved
+  // account, so an owner with no row who reaches the relay is approved and gets
+  // the default (the Headmaster Lite/Pro/Max tiers); an explicitly disabled row
+  // still denies, and a row replaces the default.
+  const fallback = normalizeDefaultAssignment(defaultAssignment);
   const base = validateSupabaseOrigin(supabaseUrl);
   const key = String(serviceRoleKey ?? "").trim();
   if (!key)
@@ -259,7 +293,7 @@ export function createSupabaseAssignmentResolver({
   // never write the cache and an expired entry is never served: a revoked,
   // replaced, or reapproved assignment is honored within the bounded TTL.
   function applyRow(ownerId, row) {
-    if (!row) return null;
+    if (!row) return fallback;
     if (!row.enabled) {
       logger.warn?.("headmaster-inference assignment revoked", { ownerId, revision: row.revision });
       return null;
@@ -317,6 +351,7 @@ export function resolveAssignmentConfiguration(env = process.env, options = {}) 
       supabaseUrl,
       serviceRoleKey,
       ttlMs: clampAssignmentTtl(env.HEADMASTER_INFERENCE_ASSIGNMENT_TTL_MS),
+      defaultAssignment: defaultAssignmentFromEnv(env),
       ...options,
     });
     return { mode, resolveAssignment: resolver.resolveAssignment };

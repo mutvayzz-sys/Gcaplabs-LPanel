@@ -6,6 +6,7 @@ import {
   ASSIGNMENT_TTL_MIN_MS,
   clampAssignmentTtl,
   createSupabaseAssignmentResolver,
+  defaultAssignmentFromEnv,
   resolveAssignmentConfiguration,
   validateSupabaseOrigin,
 } from "./assignments.mjs";
@@ -355,4 +356,88 @@ test("assignment configuration selects supabase, env, or fails closed without mi
     resolveAssignmentConfiguration({ HEADMASTER_INFERENCE_ASSIGNMENT_SOURCE: "env" }),
   );
   assert.throws(() => resolveAssignmentConfiguration({}));
+});
+
+const DEFAULT_ASSIGNMENT = {
+  noraUserId: "55555555-5555-4555-8555-555555555555",
+  providerId: "66666666-6666-4666-8666-666666666666",
+};
+
+function makeResolverWithDefault(responder, defaultAssignment, logger) {
+  return createSupabaseAssignmentResolver({
+    supabaseUrl: SUPABASE_ORIGIN,
+    serviceRoleKey: KEY,
+    fetchImpl: async (url, options) => responder(url, options),
+    now: () => NOW,
+    defaultAssignment,
+    ...(logger ? { logger } : {}),
+  });
+}
+
+test("an owner with no assignment row gets the configured default; an explicit row wins; a disabled row still denies", async () => {
+  const absent = makeResolverWithDefault(async () => jsonResponse([]), DEFAULT_ASSIGNMENT);
+  assert.deepEqual(await absent.resolveAssignment(OWNER), DEFAULT_ASSIGNMENT);
+
+  const explicit = makeResolverWithDefault(
+    async () => jsonResponse([assignmentRow()]),
+    DEFAULT_ASSIGNMENT,
+  );
+  assert.deepEqual(await explicit.resolveAssignment(OWNER), {
+    noraUserId: NORA_USER,
+    providerId: PROVIDER,
+  });
+
+  const disabled = makeResolverWithDefault(
+    async () => jsonResponse([assignmentRow({ enabled: false })]),
+    DEFAULT_ASSIGNMENT,
+    captureLogger().logger,
+  );
+  assert.equal(await disabled.resolveAssignment(OWNER), null);
+});
+
+test("without a default an absent row still denies, and lookup failures never fall back to the default", async () => {
+  const none = makeResolverWithDefault(async () => jsonResponse([]), null);
+  assert.equal(await none.resolveAssignment(OWNER), null);
+
+  const down = makeResolverWithDefault(async () => jsonResponse({}, 503), DEFAULT_ASSIGNMENT);
+  await assert.rejects(down.resolveAssignment(OWNER), { code: "assignment_lookup_failed" });
+  const anomaly = makeResolverWithDefault(
+    async () => jsonResponse([assignmentRow(), assignmentRow()]),
+    DEFAULT_ASSIGNMENT,
+  );
+  await assert.rejects(anomaly.resolveAssignment(OWNER), { code: "assignment_lookup_anomaly" });
+});
+
+test("the default assignment comes from two env settings that must be set together and be UUIDs", () => {
+  assert.equal(defaultAssignmentFromEnv({}), null);
+  assert.deepEqual(
+    defaultAssignmentFromEnv({
+      HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID: DEFAULT_ASSIGNMENT.noraUserId,
+      HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID: DEFAULT_ASSIGNMENT.providerId,
+    }),
+    DEFAULT_ASSIGNMENT,
+  );
+  assert.throws(
+    () =>
+      defaultAssignmentFromEnv({
+        HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID: DEFAULT_ASSIGNMENT.providerId,
+      }),
+    { code: "assignment_config_invalid" },
+  );
+  assert.throws(
+    () =>
+      createSupabaseAssignmentResolver({
+        supabaseUrl: SUPABASE_ORIGIN,
+        serviceRoleKey: KEY,
+        defaultAssignment: { noraUserId: "nope", providerId: DEFAULT_ASSIGNMENT.providerId },
+      }),
+    { code: "assignment_config_invalid" },
+  );
+  const configured = resolveAssignmentConfiguration({
+    HEADMASTER_INFERENCE_SUPABASE_URL: SUPABASE_ORIGIN,
+    HEADMASTER_INFERENCE_SUPABASE_SERVICE_ROLE_KEY: KEY,
+    HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID: DEFAULT_ASSIGNMENT.noraUserId,
+    HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID: DEFAULT_ASSIGNMENT.providerId,
+  });
+  assert.equal(configured.mode, "supabase");
 });
