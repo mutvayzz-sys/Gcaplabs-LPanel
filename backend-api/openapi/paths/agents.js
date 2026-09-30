@@ -348,6 +348,14 @@ const tail = {
   "/agents/{id}/stop": {
     post: summarize("Agents", "Stop a running agent", [agentParam], ["agents:write"]),
   },
+  "/agents/{id}/memory": {
+    post: summarize(
+      "Agents",
+      "Set a running agent's memory limit (2048 or 3072 MB) without a restart",
+      [agentParam],
+      ["agents:write"],
+    ),
+  },
   "/agents/{id}/restart": {
     post: summarize("Agents", "Restart a running agent in place", [agentParam], ["agents:write"]),
   },

@@ -450,6 +450,22 @@ module.exports = {
   },
 
   /**
+   * Change a running agent's memory limit in place (Docker-family backends).
+   *
+   * @param {Object} agent - Agent whose container limit should change.
+   * @param {number} ramMb - New limit in MiB.
+   * @returns {Promise<Object>} Backend result.
+   */
+  async setMemory(agent, ramMb) {
+    const id = resolveKubernetesRuntimeId(agent, "set memory");
+    const backend = await backendFor(agent);
+    if (typeof backend.setMemory !== "function") {
+      throw new Error(`Backend ${resolveAgentBackendType(agent)} does not support live memory changes`);
+    }
+    return backend.setMemory(id, ramMb);
+  },
+
+  /**
    * Replace an agent's managed runtime environment variables.
    *
    * @param {Object} agent - Agent whose runtime environment should be updated.

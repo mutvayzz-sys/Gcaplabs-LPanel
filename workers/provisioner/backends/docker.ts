@@ -1328,6 +1328,23 @@ class DockerBackend extends ProvisionerBackend {
     console.log(`[docker] Container ${containerId} restarted`);
   }
 
+  /**
+   * Change a container's memory limit in place. Docker applies the new cgroup
+   * limit live (no restart); swap is pinned to the limit so it cannot be used to
+   * exceed it. Growing and shrinking use the same call.
+   */
+  async setMemory(containerId, ramMb) {
+    const mb = Number(ramMb);
+    if (!Number.isInteger(mb) || mb < 512) {
+      throw new Error(`Invalid memory limit: ${ramMb}`);
+    }
+    const bytes = mb * 1024 * 1024;
+    const container = this.docker.getContainer(containerId);
+    await container.update({ Memory: bytes, MemorySwap: bytes });
+    console.log(`[docker] Container ${containerId} memory limit set to ${mb} MB`);
+    return { ram_mb: mb };
+  }
+
   async logs(containerId, opts = {}) {
     const container = this.docker.getContainer(containerId);
     const stream = await container.logs({

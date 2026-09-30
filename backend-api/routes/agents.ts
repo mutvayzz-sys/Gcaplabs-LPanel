@@ -2860,6 +2860,54 @@ router.post("/:id/stop", async (req, res, next) => {
   }
 });
 
+const AGENT_MEMORY_CHOICES_MB = [2048, 3072];
+
+// Live memory limit for an agent's container. Only the two tiers Bot Screen
+// uses are accepted (2 GB default, 3 GB while Bot Screen is on).
+router.post("/:id/memory", async (req, res, next) => {
+  try {
+    const ramMb = Number(req.body?.ram_mb);
+    if (!AGENT_MEMORY_CHOICES_MB.includes(ramMb)) {
+      return res
+        .status(400)
+        .json({ error: `ram_mb must be one of ${AGENT_MEMORY_CHOICES_MB.join(", ")}` });
+    }
+    const result = await withAccessibleAgentLifecycleLock(
+      {
+        agentId: req.params.id,
+        req,
+        applicationName: "nora-backend-agent-memory",
+      },
+      async (agent) => {
+        res.locals.auditContext = buildAgentContext(agent, {
+          ownerEmail: req.user.email || null,
+        });
+        if (!containerManager.canMutate(agent)) {
+          const error = new Error("No container — redeploy the agent first");
+          error.statusCode = 400;
+          throw error;
+        }
+        if (Number(agent.ram_mb) !== ramMb || agent.status === "running") {
+          await containerManager.setMemory(agent, ramMb);
+        }
+        const updated = await db.query("UPDATE agents SET ram_mb = $1 WHERE id = $2 RETURNING *", [
+          ramMb,
+          agent.id,
+        ]);
+        await monitoring.logEvent(
+          "agent_memory_changed",
+          `Agent "${agent.name}" memory limit set to ${ramMb} MB`,
+          agentAuditMetadata(req, updated.rows[0], { result: { ram_mb: ramMb } }),
+        );
+        return serializeAgent(updated.rows[0]);
+      },
+    );
+    res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
 async function destroyAgent(agentId, req, res) {
   const visibleAgent = await findAccessibleAgentForRequest(req, agentId, "viewer");
   if (!visibleAgent) return res.status(404).json({ error: "Agent not found" });
