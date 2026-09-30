@@ -168,7 +168,13 @@ def apply_headmaster_model(config, payload):
         # Keep the choice only while the model still points at that entry's
         # endpoint and credential; otherwise (inference host changed, entry
         # rewritten) fall through and reset to the managed default.
+        # The only credential a personal-key entry may name is the runtime's own
+        # derived inference key. Admission writes exactly that; an entry that
+        # names any other variable (for example an operator secret) is not
+        # trusted and the model is reset to the managed default.
         entry_key_env = str(own_entry.get("key_env") or "").strip()
+        if entry_key_env != "HEADMASTER_INFERENCE_KEY":
+            entry_key_env = ""
         same_url = str(model.get("base_url") or "").strip().rstrip("/") == str(own_entry.get("base_url") or "").strip().rstrip("/")
         key_env_ref = "\${" + entry_key_env + "}"
         same_key = bool(entry_key_env) and (

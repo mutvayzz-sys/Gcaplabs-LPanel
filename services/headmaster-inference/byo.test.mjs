@@ -472,3 +472,36 @@ test("assertion versions: v2 needs byo_provider, v1 must not carry it", () => {
   assert.equal(check({ ...base, v: 1, byo_provider: "openai" }), null);
   assert.equal(check({ ...base, v: 2 }), null);
 });
+
+test("requests for a missing or unreadable key never spend the byo request budget", async (t) => {
+  const missing = await setup(t, { rows: [] });
+  for (let i = 0; i < 610; i += 1) {
+    const res = await missing.chat(CHAT);
+    assert.equal(res.status, 404, `request ${i}`);
+    await res.text();
+  }
+  assert.equal(missing.byoQuotaStore.inspect(OWNER).active, 0);
+  // The key is then stored: the account is not rate limited by the earlier 404s
+  // (the hourly cap is 600, so this would be a 429 if they had counted).
+  missing.state.rows = [
+    { owner_id: OWNER, provider: "openai", ciphertext: missing.state.ciphertext, revision: 1 },
+  ];
+  missing.state.clock += 60_000;
+  const after = await missing.chat(CHAT);
+  assert.equal(after.status, 200);
+  await after.text();
+
+  const unreadable = await setup(t, {
+    rows: [{ owner_id: OWNER, provider: "openai", ciphertext: "v1.AAAA.AAAA.AAAA", revision: 1 }],
+  });
+  for (let i = 0; i < 610; i += 1) {
+    const res = await unreadable.chat(CHAT);
+    assert.equal(res.status, 503);
+    await res.text();
+  }
+  unreadable.state.rows = [
+    { owner_id: OWNER, provider: "openai", ciphertext: unreadable.state.ciphertext, revision: 2 },
+  ];
+  unreadable.state.clock += 60_000;
+  assert.equal((await unreadable.chat(CHAT)).status, 200);
+});

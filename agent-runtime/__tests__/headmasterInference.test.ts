@@ -223,6 +223,16 @@ describe("container bootstrap writes the managed model block", () => {
     });
     expect(viaApiKey.model.provider).toBe("headmaster-own-openai");
 
+    // An entry that names any credential variable other than the derived inference key is not trusted,
+    // even when the model repeats the same name.
+    const foreign = { ...own, key_env: "OPERATOR_SECRET_KEY" };
+    const foreignKept = runBootstrap(buildHeadmasterModelConfig({}), {
+      model: { ...chosen, key_env: "OPERATOR_SECRET_KEY" },
+      providers: { "headmaster-own-openai": foreign },
+    });
+    expect(foreignKept.model.provider).toBe("headmaster");
+    expect(foreignKept.model.key_env).toBeUndefined();
+
     // The entry is gone (key removed, or a fresh volume before admission re-syncs): back to managed.
     const replaced = runBootstrap(buildHeadmasterModelConfig({}), { model: chosen });
     expect(replaced.model.provider).toBe("headmaster");
