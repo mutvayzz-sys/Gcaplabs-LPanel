@@ -2864,6 +2864,7 @@ const AGENT_MEMORY_CHOICES_MB = [2048, 3072];
 
 // Live memory limit for an agent's container. Only the two tiers Bot Screen
 // uses are accepted (2 GB default, 3 GB while Bot Screen is on).
+// Optional `bot_screen` boolean toggles the root-owned gate file afterwards.
 router.post("/:id/memory", async (req, res, next) => {
   try {
     const ramMb = Number(req.body?.ram_mb);
@@ -2872,6 +2873,13 @@ router.post("/:id/memory", async (req, res, next) => {
         .status(400)
         .json({ error: `ram_mb must be one of ${AGENT_MEMORY_CHOICES_MB.join(", ")}` });
     }
+    // Optional: also create (true) or remove (false) the root-owned Bot Screen
+    // gate file in the container. Absent keeps the memory-only behavior.
+    const botScreenRaw = req.body?.bot_screen;
+    if (botScreenRaw !== undefined && typeof botScreenRaw !== "boolean") {
+      return res.status(400).json({ error: "bot_screen must be a boolean" });
+    }
+    const botScreen = botScreenRaw;
     const result = await withAccessibleAgentLifecycleLock(
       {
         agentId: req.params.id,
@@ -2887,6 +2895,11 @@ router.post("/:id/memory", async (req, res, next) => {
           error.statusCode = 400;
           throw error;
         }
+        if (botScreen !== undefined && agent.status !== "running") {
+          const error = new Error("Agent must be running to change the Bot Screen gate");
+          error.statusCode = 409;
+          throw error;
+        }
         if (Number(agent.ram_mb) !== ramMb || agent.status === "running") {
           await containerManager.setMemory(agent, ramMb);
         }
@@ -2894,10 +2907,13 @@ router.post("/:id/memory", async (req, res, next) => {
           ramMb,
           agent.id,
         ]);
+        if (botScreen !== undefined) {
+          await containerManager.setBotScreenGate(agent, botScreen);
+        }
         await monitoring.logEvent(
           "agent_memory_changed",
           `Agent "${agent.name}" memory limit set to ${ramMb} MB`,
-          agentAuditMetadata(req, updated.rows[0], { result: { ram_mb: ramMb } }),
+          agentAuditMetadata(req, updated.rows[0], { result: { ram_mb: ramMb, ...(typeof botScreen === "boolean" ? { bot_screen: botScreen } : {}) } }),
         );
         return serializeAgent(updated.rows[0]);
       },

@@ -466,7 +466,17 @@ async function buildHermesManagedEnvForAgent(userId, agentId) {
 
   try {
     const { getIntegrationEnvVars } = require("./integrations");
-    const integrationEnvVars = await getIntegrationEnvVars(agentId);
+    const rawIntegrationEnvVars = await getIntegrationEnvVars(agentId);
+    // A managed runtime never carries a provider key or endpoint override,
+    // even one an operator attached through an integration.
+    const providerEnvNames = headmasterManaged
+      ? new Set(llmProviders.getManagedProviderEnvNames({ runtimeFamily: "hermes" }))
+      : null;
+    const integrationEnvVars = providerEnvNames
+      ? Object.fromEntries(
+          Object.entries(rawIntegrationEnvVars || {}).filter(([k]) => !providerEnvNames.has(k)),
+        )
+      : rawIntegrationEnvVars;
     return Object.fromEntries(
       Object.entries({
         ...integrationEnvVars,

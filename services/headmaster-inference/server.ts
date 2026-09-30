@@ -35,7 +35,7 @@ function requiredSecret() {
 async function main() {
   // Durable assignments come from Headmaster Supabase; the env map remains a
   // LEGACY compatibility source and is only parsed when it is selected.
-  const assignments = resolveAssignmentConfiguration(process.env);
+  const assignments = resolveAssignmentConfiguration(process.env, { logger: console });
   if (assignments.warning) console.warn(assignments.warning);
   const assignmentLookup =
     assignments.mode === "supabase"

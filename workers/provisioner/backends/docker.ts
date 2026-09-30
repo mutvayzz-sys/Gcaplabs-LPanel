@@ -1345,6 +1345,47 @@ class DockerBackend extends ProvisionerBackend {
     return { ram_mb: mb };
   }
 
+  /**
+   * Create or remove the root-owned Bot Screen gate file inside a container.
+   * Runs as root through docker exec so the agent's own user (which cannot
+   * write /etc/headmaster) cannot flip the switch. Core reads the file.
+   */
+  async setBotScreenGate(containerId, enabled) {
+    if (typeof enabled !== "boolean") throw new Error("Invalid bot screen gate value");
+    const cmd = enabled
+      ? [
+          "/bin/sh",
+          "-c",
+          "set -e; mkdir -p /etc/headmaster; chown root:root /etc/headmaster; chmod 0755 /etc/headmaster; " +
+            ": > /etc/headmaster/bot-screen.enabled; chown root:root /etc/headmaster/bot-screen.enabled; " +
+            "chmod 0644 /etc/headmaster/bot-screen.enabled",
+        ]
+      : ["/bin/sh", "-c", "rm -f /etc/headmaster/bot-screen.enabled"];
+    const container = this.docker.getContainer(containerId);
+    const execInstance = await container.exec({
+      Cmd: cmd,
+      User: "root",
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+    });
+    const stream = await execInstance.start({ hijack: true, stdin: false, Tty: false });
+    await new Promise((resolve, reject) => {
+      if (!stream || typeof stream.on !== "function") return resolve(undefined);
+      stream.on("data", () => {});
+      stream.on("end", resolve);
+      stream.on("close", resolve);
+      stream.on("error", reject);
+      if (typeof stream.resume === "function") stream.resume();
+    });
+    const info = await execInstance.inspect();
+    if (info && info.ExitCode !== 0) {
+      throw new Error(`Bot screen gate update failed (exit ${info.ExitCode})`);
+    }
+    console.log(`[docker] Container ${containerId} bot screen gate ${enabled ? "enabled" : "disabled"}`);
+    return { bot_screen: enabled };
+  }
+
   async logs(containerId, opts = {}) {
     const container = this.docker.getContainer(containerId);
     const stream = await container.logs({

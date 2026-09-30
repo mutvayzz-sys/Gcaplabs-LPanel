@@ -466,6 +466,23 @@ module.exports = {
   },
 
   /**
+   * Create or remove the root-owned Bot Screen gate file in a running agent
+   * container (Docker-family backends).
+   *
+   * @param {Object} agent - Agent whose container should be updated.
+   * @param {boolean} enabled - true creates the gate file, false removes it.
+   * @returns {Promise<Object>} Backend result.
+   */
+  async setBotScreenGate(agent, enabled) {
+    const id = resolveKubernetesRuntimeId(agent, "set bot screen gate");
+    const backend = await backendFor(agent);
+    if (typeof backend.setBotScreenGate !== "function") {
+      throw new Error(`Backend ${resolveAgentBackendType(agent)} does not support the bot screen gate`);
+    }
+    return backend.setBotScreenGate(id, enabled);
+  },
+
+  /**
    * Replace an agent's managed runtime environment variables.
    *
    * @param {Object} agent - Agent whose runtime environment should be updated.
