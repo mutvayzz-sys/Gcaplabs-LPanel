@@ -163,9 +163,21 @@ def apply_headmaster_model(config, payload):
     # left exactly as it is while that entry exists. The entries themselves are
     # never touched here: only providers[provider_id] is written above.
     current_provider = str(model.get("provider") or "").strip()
-    if current_provider.startswith("headmaster-own-") and isinstance(providers.get(current_provider), dict):
-        config["model"] = model
-        return True
+    own_entry = providers.get(current_provider) if current_provider.startswith("headmaster-own-") else None
+    if isinstance(own_entry, dict):
+        # Keep the choice only while the model still points at that entry's
+        # endpoint and credential; otherwise (inference host changed, entry
+        # rewritten) fall through and reset to the managed default.
+        entry_key_env = str(own_entry.get("key_env") or "").strip()
+        same_url = str(model.get("base_url") or "").strip().rstrip("/") == str(own_entry.get("base_url") or "").strip().rstrip("/")
+        key_env_ref = "\${" + entry_key_env + "}"
+        same_key = bool(entry_key_env) and (
+            str(model.get("key_env") or "").strip() == entry_key_env
+            or str(model.get("api_key") or "").strip() == key_env_ref
+        )
+        if same_url and same_key:
+            config["model"] = model
+            return True
     keep_choice = model.get("provider") == provider_id and model.get("default") in tiers
     model["provider"] = provider_id
     model["base_url"] = str(payload.get("baseUrl") or "").strip()

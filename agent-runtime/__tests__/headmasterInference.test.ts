@@ -203,6 +203,26 @@ describe("container bootstrap writes the managed model block", () => {
     expect(kept.providers["headmaster-own-openai"]).toEqual(own);
     expect(kept.providers.headmaster.key_env).toBe("HEADMASTER_INFERENCE_KEY");
 
+    // The entry moved to another inference host: the stale model is not kept.
+    const moved = runBootstrap(buildHeadmasterModelConfig({}), {
+      model: chosen,
+      providers: { "headmaster-own-openai": { ...own, base_url: "https://other.example/v1/own/openai" } },
+    });
+    expect(moved.model.provider).toBe("headmaster");
+    expect(moved.model.base_url).toBe(HEADMASTER_INFERENCE_DEFAULT_BASE_URL);
+
+    // A different credential reference is not kept either; the api_key form of the same reference is.
+    const otherKey = runBootstrap(buildHeadmasterModelConfig({}), {
+      model: { ...chosen, key_env: "SOMETHING_ELSE" },
+      providers: { "headmaster-own-openai": own },
+    });
+    expect(otherKey.model.provider).toBe("headmaster");
+    const viaApiKey = runBootstrap(buildHeadmasterModelConfig({}), {
+      model: { provider: chosen.provider, default: "gpt-x", base_url: `${own.base_url}/`, api_key: HEADMASTER_INFERENCE_KEY_REF },
+      providers: { "headmaster-own-openai": own },
+    });
+    expect(viaApiKey.model.provider).toBe("headmaster-own-openai");
+
     // The entry is gone (key removed, or a fresh volume before admission re-syncs): back to managed.
     const replaced = runBootstrap(buildHeadmasterModelConfig({}), { model: chosen });
     expect(replaced.model.provider).toBe("headmaster");
