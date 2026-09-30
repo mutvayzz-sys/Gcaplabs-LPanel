@@ -12,6 +12,7 @@ import {
   providerCompletionUrl,
   providerModelsUrl,
   safeProviderError,
+  tierAssignments,
 } from "./policy.mjs";
 
 export const MAX_REQUEST_BYTES = 36 * 1024 * 1024;
@@ -179,10 +180,12 @@ async function readProviderResponse(response, cap) {
   return Buffer.concat(chunks);
 }
 
-function modelList(models, requestId) {
+function modelList(models, requestId, tiers = undefined) {
   return {
     object: "list",
     data: models.map((id) => ({ id, object: "model", owned_by: "headmaster" })),
+    // Which backing model each Headmaster tier resolves to for this account.
+    ...(tiers ? { headmaster_tiers: tiers } : {}),
     request_id: requestId,
   };
 }
@@ -391,7 +394,12 @@ export function createInferenceService({
           "No compatible models are enabled for this account.",
           claims.request_id,
         );
-      return sendJson(res, 200, modelList(models, claims.request_id), claims.request_id);
+      return sendJson(
+        res,
+        200,
+        modelList(models, claims.request_id, tierAssignments(effectiveMapping.provider, models)),
+        claims.request_id,
+      );
     }
 
     let parsed;

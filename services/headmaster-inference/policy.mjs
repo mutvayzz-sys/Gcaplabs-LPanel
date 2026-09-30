@@ -175,6 +175,39 @@ export function resolveTierModel(model, allowedModels) {
   return allowedModels[0] ?? model;
 }
 
+// OpenRouter's catalog id for a provider-native model id, so a client can look up
+// context length and price. Best effort: a model whose OpenRouter id is not
+// certain maps to null and the client shows no bars for it.
+const OPENROUTER_VENDOR = Object.freeze({
+  openai: "openai",
+  xai: "x-ai",
+  deepseek: "deepseek",
+  moonshot: "moonshotai",
+  zai: "z-ai",
+});
+
+export function openRouterModelId(provider, model) {
+  if (typeof model !== "string" || !model) return null;
+  if (provider === "openrouter") return model.includes("/") ? model : null;
+  const vendor = OPENROUTER_VENDOR[provider];
+  return vendor ? `${vendor}/${model}` : null;
+}
+
+// What each tier resolves to for this account: the same rule prepareChatCompletion
+// applies, reported instead of applied.
+export function tierAssignments(provider, allowedModels) {
+  return Object.fromEntries(
+    HEADMASTER_TIER_MODELS.map((tier) => {
+      const model = resolveTierModel(tier, allowedModels);
+      const resolved = model !== tier;
+      return [
+        tier,
+        { model: resolved ? model : null, openrouter_id: resolved ? openRouterModelId(provider, model) : null },
+      ];
+    }),
+  );
+}
+
 export function prepareChatCompletion(body, mapping, providerMetadataModels, limits = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "body_invalid" };
   if (Object.keys(body).some((key) => CLIENT_AUTHORITY_FIELDS.has(key.toLowerCase()))) {
