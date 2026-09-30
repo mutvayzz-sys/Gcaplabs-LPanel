@@ -1,6 +1,6 @@
 # Headmaster compatibility notes
 
-Status: N0 source adoption in progress; no Headmaster Nora image has been released.
+Status: N0 source adoption in progress; no Headmaster Nora image has been released as a tagged Nora release. Production runs operator-built images described under "Production state (30 September 2026)".
 
 ## Source and runtime pins
 
@@ -40,6 +40,13 @@ This comparison confirms those files match, but it does not identify the complet
 ## Rollback references
 
 The production images observed on 2026-09-23, before any N0 release, are recorded in `headmaster-build-manifest.json`. No production Nora image, container, source tree, database, or runtime was changed for N0. The worker and API rollback digests are references only; no rollback action has been performed.
+
+## Production state (30 September 2026)
+
+- Cloud runtimes and Nora's default runtime image (`HERMES_DOCKER_IMAGE`) are `nora-headmaster-memory:1de5b492`, built from HeadmasterCore main `1de5b492c0905b7e31b20e6e8e70b1fe01da8ad5`. The Headmaster bridge's `HERMES_RUNTIME_IMAGE` must stay equal to it (the bridge fails closed otherwise).
+- The worker runs `headmaster-nora/worker-provisioner:a318c1e7e6bb`, built from this repository's `a318c1e7e6bbd7d52917b9a5fedd118a5a66d9be`. The API container stays on `headmaster-nora/backend-api:1bae078ad99d`, so API and worker are not from one commit. See `headmaster-build-manifest.json`, `production_2026_09_30`.
+- Fixed bug: from commit 180edd9 until `a318c1e`, the worker's agent SELECT omitted the four `headmaster_*` columns, so `headmasterEnv(agentRow)` returned nothing and new runtimes started without `HEADMASTER_OWNER_ID`, `HEADMASTER_WORKSPACE_ID`, `HEADMASTER_MEMORY_BANK_ID` and `HEADMASTER_MEMORY_GATEWAY_URL`. The memory bootstrap reads only the container's Docker environment, so those runtimes had no Hindsight memory. `HEADMASTER_AGENT_COLUMNS` in `backend-api/headmasterConfig.ts` now drives the SELECT, and `headmasterConfig.test.ts` fails if the two drift apart.
+- Verified 30 September 2026 on one recreated test account: four variables present, Hindsight configured, a chat retain created the owner's bank and schema. Still outstanding: a first-time sign-up that goes through the fixed worker without a manual redeploy.
 
 ## Open evidence
 
