@@ -143,7 +143,8 @@ function buildHeadmasterProviderEntry(env = process.env) {
 // by buildHeadmasterModelConfig(): register the provider entry with its fixed
 // tiers, point the main model at it, and keep a tier the user already chose.
 // Anything else in `model` (a foreign provider from an older image, an operator
-// key) is replaced.
+// key) is replaced, except a choice of the owner's own personal-key provider
+// entry (headmaster-own-*), which stays while that entry exists.
 const HEADMASTER_APPLY_MODEL_PY = `
 def apply_headmaster_model(config, payload):
     provider_id = str(payload.get("provider") or "").strip()
@@ -157,6 +158,14 @@ def apply_headmaster_model(config, payload):
     config["providers"] = providers
     model = config.get("model")
     model = dict(model) if isinstance(model, dict) else {}
+    # A model the owner picked from one of their personal-key providers
+    # (providers.headmaster-own-<provider>, written server-side by admission) is
+    # left exactly as it is while that entry exists. The entries themselves are
+    # never touched here: only providers[provider_id] is written above.
+    current_provider = str(model.get("provider") or "").strip()
+    if current_provider.startswith("headmaster-own-") and isinstance(providers.get(current_provider), dict):
+        config["model"] = model
+        return True
     keep_choice = model.get("provider") == provider_id and model.get("default") in tiers
     model["provider"] = provider_id
     model["base_url"] = str(payload.get("baseUrl") or "").strip()
