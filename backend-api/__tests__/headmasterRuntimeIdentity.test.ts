@@ -248,3 +248,41 @@ describe("POST /integrations/headmaster/runtime-identity", () => {
     jest.resetModules();
   });
 });
+
+describe("runtime-identity rate limit", () => {
+  test("returns 429 past the configured ceiling, after auth", async () => {
+    process.env.HEADMASTER_RUNTIME_IDENTITY_RATE_LIMIT_MAX = "2";
+    jest.resetModules();
+    jest.doMock("../db", () => mockDb);
+    const limitedRouter = require("../routes/headmasterRuntimeIdentity");
+    delete process.env.HEADMASTER_RUNTIME_IDENTITY_RATE_LIMIT_MAX;
+    const app = express();
+    app.use(express.json());
+    app.use("/integrations/headmaster", limitedRouter);
+    mockDb.query.mockReset();
+    mockDb.query.mockResolvedValue({ rows: [] });
+    const send = (token) =>
+      request(app)
+        .post("/integrations/headmaster/runtime-identity")
+        .set("authorization", `Bearer ${token}`)
+        .send({ runtime_key_sha256: sha256Hex(RUNTIME_KEY) });
+
+    // Unauthenticated calls do not consume the quota.
+    expect((await send("wrong-token-wrong-token-wrong-token-1")).status).toBe(401);
+    expect((await send(SERVICE_TOKEN)).status).toBe(404);
+    expect((await send(SERVICE_TOKEN)).status).toBe(404);
+    expect((await send(SERVICE_TOKEN)).status).toBe(429);
+  });
+
+  test("default ceiling leaves normal traffic unaffected", async () => {
+    mockDb.query.mockResolvedValue({ rows: [] });
+    const app = buildApp();
+    for (let i = 0; i < 25; i += 1) {
+      const res = await request(app)
+        .post("/integrations/headmaster/runtime-identity")
+        .set("authorization", `Bearer ${SERVICE_TOKEN}`)
+        .send({ runtime_key_sha256: sha256Hex(RUNTIME_KEY) });
+      expect(res.status).toBe(404);
+    }
+  });
+});

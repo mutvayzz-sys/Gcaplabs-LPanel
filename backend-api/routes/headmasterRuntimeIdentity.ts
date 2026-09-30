@@ -25,6 +25,7 @@
 
 const express = require("express");
 const crypto = require("crypto");
+const rateLimit = require("express-rate-limit");
 const db = require("../db");
 const { decrypt } = require("../crypto");
 const { deriveHeadmasterInferenceKey } = require("../../agent-runtime/lib/headmasterInference");
@@ -59,6 +60,26 @@ router.use((req, res, next) => {
   }
   next();
 });
+
+// Machine-to-machine (admission calls this, with its own bounded cache in
+// front), so the ceiling is generous; it exists to cap the per-call cost of
+// decrypting every adopted agent's token if the service token ever leaks or a
+// caller loops. Runs after auth so unauthenticated traffic cannot spend the
+// legitimate caller's quota. Keyed by client IP (trust proxy is set).
+function positiveIntEnv(name, fallback) {
+  const parsed = Number.parseInt(process.env[name] || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const runtimeIdentityLimiter = rateLimit({
+  windowMs: positiveIntEnv("HEADMASTER_RUNTIME_IDENTITY_RATE_LIMIT_WINDOW_MS", 60 * 1000),
+  max: positiveIntEnv("HEADMASTER_RUNTIME_IDENTITY_RATE_LIMIT_MAX", 1200),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later" },
+});
+
+router.use(runtimeIdentityLimiter);
 
 router.post("/runtime-identity", async (req, res) => {
   const digest = String(req.body?.runtime_key_sha256 || "").toLowerCase();
