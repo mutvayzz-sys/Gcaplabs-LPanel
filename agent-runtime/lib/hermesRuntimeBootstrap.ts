@@ -1,5 +1,10 @@
 // @ts-nocheck
 
+const {
+  HEADMASTER_APPLY_MODEL_PY,
+  HEADMASTER_MANAGED_MARKER,
+} = require("./headmasterInference");
+
 const HERMES_MODEL_CONFIG_ENV = "NORA_HERMES_MODEL_CONFIG_B64";
 const HERMES_MANAGED_ENV_ENV = "NORA_HERMES_MANAGED_ENV_B64";
 const HERMES_EMPTY_STATE_SENTINEL = "__NORA_EMPTY_STATE_V1__";
@@ -133,6 +138,8 @@ function buildHermesRuntimeConfigBootstrapCommand() {
     "",
     "from hermes_cli.config import get_config_path, load_config, save_config",
     "",
+    ...HEADMASTER_APPLY_MODEL_PY.trim().split("\n"),
+    "",
     "def repair_surrogates(value):",
     "    if isinstance(value, str):",
     '        return value.encode("utf-16", "surrogatepass").decode("utf-16", "replace")',
@@ -158,7 +165,11 @@ function buildHermesRuntimeConfigBootstrapCommand() {
     'api_key_present = "apiKey" in payload or "api_key" in payload',
     'api_key = str(payload.get("apiKey") or payload.get("api_key") or "").strip()',
     "",
-    "if not clear_model:",
+    `headmaster_managed = payload.get("managed") == ${JSON.stringify(HEADMASTER_MANAGED_MARKER)}`,
+    "if not clear_model and headmaster_managed:",
+    "    if apply_headmaster_model(config, payload):",
+    '        model = dict(config["model"])',
+    "elif not clear_model:",
     "    if default_model:",
     '        model["default"] = default_model',
     "    else:",

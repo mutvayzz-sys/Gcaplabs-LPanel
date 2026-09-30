@@ -167,6 +167,17 @@ the same signed assertion plus an extra claim `byo_provider: <provider>`.
   response bodies. Logs carry request id, provider, model id and error codes
   only.
 
+## Model names
+
+Clients may name a Headmaster tier (`headmaster-lite`, `headmaster-pro`,
+`headmaster-max`). The relay resolves a tier to the account's first allowed model
+before the provider call, so a tier never widens the allowlist: an account with
+no allowed model gets `model_not_allowed`. All three tiers use the same backend
+model until the operator assigns distinct ones. `GET /v1/models` still lists the
+real allowed models; the desktop and Cloud runtimes register the tier names
+themselves. The list lives in `policy.mjs`, `agent-runtime/lib/headmasterInference.ts`
+and the desktop's `headmaster-trial-provider.ts`; keep them equal.
+
 ## Limits and behavior
 
 - Only allowlisted provider/model pairs are returned. The allowed models are

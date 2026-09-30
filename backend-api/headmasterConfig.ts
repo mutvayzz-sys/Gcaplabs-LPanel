@@ -22,6 +22,28 @@ function headmasterEnv(agent = {}) {
   );
 }
 
+// A Hermes runtime is Headmaster-managed once it has adopted a Headmaster
+// identity or carries any Headmaster bootstrap value. Such a runtime gets its
+// model from the Headmaster relay, never from the operator's own provider rows.
+function isHeadmasterManagedAgent(agent = {}) {
+  if (!agent) return false;
+  return (
+    agent.external_namespace === "headmaster" ||
+    Object.values(FIELDS).some((field) => Boolean(agent[field]))
+  );
+}
+
+async function agentIsHeadmasterManaged(agentId, queryable = require("./db")) {
+  if (!agentId) return false;
+  const result = await queryable.query(
+    `SELECT external_namespace, headmaster_owner_id, headmaster_workspace_id,
+            headmaster_memory_bank_id, headmaster_memory_gateway_url
+       FROM agents WHERE id = $1`,
+    [agentId],
+  );
+  return isHeadmasterManagedAgent(result?.rows?.[0]);
+}
+
 function managedConfigStatus(agent) {
   return {
     integration_key_names: Object.entries(headmasterEnv(agent))
@@ -185,6 +207,8 @@ module.exports = {
   HEADMASTER_ENV_NAMES,
   HEADMASTER_AGENT_COLUMNS,
   headmasterEnv,
+  isHeadmasterManagedAgent,
+  agentIsHeadmasterManaged,
   managedConfigStatus,
   validateConfig,
   deploymentConfig,

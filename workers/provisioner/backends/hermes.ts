@@ -16,6 +16,9 @@ const {
 const {
   deriveHermesDashboardBasicAuth,
 } = require("../../../agent-runtime/lib/hermesDashboardAuth");
+const {
+  headmasterInferenceContainerEnv,
+} = require("../../../agent-runtime/lib/headmasterInference");
 
 const HERMES_RUNTIME_PORT = 8642;
 const HERMES_HOME = "/opt/data";
@@ -266,6 +269,10 @@ class HermesBackend extends DockerBackend {
       GATEWAY_HEALTH_URL: `http://127.0.0.1:${HERMES_RUNTIME_PORT}`,
       MESSAGING_CWD: HERMES_WORKSPACE,
       TERMINAL_CWD: HERMES_WORKSPACE,
+      // Credential and endpoint for Headmaster's managed inference relay. The
+      // key is derived from API_SERVER_KEY, so it is inert on any install that
+      // has no relay and never duplicates an operator provider key.
+      ...headmasterInferenceContainerEnv(apiServerKey, process.env),
       // s6 initialization runs before the managed .env is sourced. Only
       // server-owned, nonsecret memory identity belongs in the Docker env.
       ...Object.fromEntries(

@@ -74,6 +74,9 @@ jest.mock("../healthChecks", () => ({
 }));
 
 const {
+  deriveHeadmasterInferenceKey,
+} = require("../../agent-runtime/lib/headmasterInference");
+const {
   buildDefaultModelCommand,
   buildHermesEnvWriteCommand,
   buildHermesManagedEnvForAgent,
@@ -194,7 +197,8 @@ describe("auth sync", () => {
     delete global.fetch;
   });
 
-  it("keeps Headmaster identity alongside provider and integration env, including after key rotation", async () => {
+  it("keeps Headmaster identity and the relay key alongside integration env, and never the operator's provider keys", async () => {
+    const gatewayKey = "runtime-gateway-key";
     mockDb.query.mockResolvedValue({
       rows: [
         {
@@ -202,6 +206,8 @@ describe("auth sync", () => {
           headmaster_workspace_id: "workspace",
           headmaster_memory_bank_id: "bank",
           headmaster_memory_gateway_url: "http://memory:8888",
+          external_namespace: "headmaster",
+          gateway_token: gatewayKey,
         },
       ],
     });
@@ -209,24 +215,46 @@ describe("auth sync", () => {
       GITHUB_TOKEN: "fixture",
       HEADMASTER_OWNER_ID: "spoof",
     });
-    expect(await buildHermesManagedEnvForAgent("user", "agent")).toMatchObject({
+    const expected = {
       HEADMASTER_OWNER_ID: "owner",
       HEADMASTER_WORKSPACE_ID: "workspace",
       HEADMASTER_MEMORY_BANK_ID: "bank",
       HEADMASTER_MEMORY_GATEWAY_URL: "http://memory:8888",
-      OPENAI_API_KEY: "sk-live-test",
+      HEADMASTER_INFERENCE_KEY: deriveHeadmasterInferenceKey(gatewayKey),
       GITHUB_TOKEN: "fixture",
-    });
+    };
+    const first = await buildHermesManagedEnvForAgent("user", "agent");
+    expect(first).toMatchObject(expected);
+    expect(first).not.toHaveProperty("OPENAI_API_KEY");
+    // A rotated operator key changes nothing for a Headmaster-managed runtime.
     mockGetProviderKeys.mockResolvedValue({ OPENAI_API_KEY: "rotated-fixture" });
-    expect(await buildHermesManagedEnvForAgent("user", "agent")).toMatchObject({
-      HEADMASTER_OWNER_ID: "owner",
-      OPENAI_API_KEY: "rotated-fixture",
+    mockGetProviderEndpoints.mockResolvedValue({
+      byEnvVar: { OPENAI_API_KEY: "https://operator.example/v1" },
+      byProvider: {},
+      apiVersionByEnvVar: {},
+      apiVersionByProvider: {},
+      deploymentByEnvVar: {},
     });
+    mockBuildBaseUrlEnvVars.mockReturnValue({ OPENAI_BASE_URL: "https://operator.example/v1" });
+    const rotated = await buildHermesManagedEnvForAgent("user", "agent");
+    expect(rotated).toMatchObject({ HEADMASTER_OWNER_ID: "owner" });
+    expect(rotated).not.toHaveProperty("OPENAI_API_KEY");
+    expect(rotated).not.toHaveProperty("OPENAI_BASE_URL");
+    expect(mockGetProviderKeys).not.toHaveBeenCalled();
     mockGetIntegrationEnvVars.mockRejectedValue(new Error("unavailable"));
-    expect(await buildHermesManagedEnvForAgent("user", "agent")).toMatchObject({
+    const degraded = await buildHermesManagedEnvForAgent("user", "agent");
+    expect(degraded).toMatchObject({
       HEADMASTER_OWNER_ID: "owner",
-      OPENAI_API_KEY: "rotated-fixture",
+      HEADMASTER_INFERENCE_KEY: expected.HEADMASTER_INFERENCE_KEY,
     });
+    expect(degraded).not.toHaveProperty("OPENAI_API_KEY");
+  });
+
+  it("still gives an ordinary Hermes runtime the account's provider keys and no relay key", async () => {
+    mockDb.query.mockResolvedValue({ rows: [{ gateway_token: "some-gateway-key" }] });
+    const env = await buildHermesManagedEnvForAgent("user", "agent");
+    expect(env).toMatchObject({ OPENAI_API_KEY: "sk-live-test" });
+    expect(env).not.toHaveProperty("HEADMASTER_INFERENCE_KEY");
   });
 
   it("fails closed on Headmaster persistence read failure before any runtime write", async () => {

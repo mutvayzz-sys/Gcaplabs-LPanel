@@ -20,6 +20,10 @@ const {
 } = require("./remoteHosts");
 const { shellSingleQuote } = require("../agent-runtime/lib/containerCommand");
 const {
+  buildHeadmasterModelConfig,
+  HEADMASTER_PROVIDER_ID,
+} = require("../agent-runtime/lib/headmasterInference");
+const {
   buildOpenClawAuthProfilesWriteCommand,
   buildOpenClawCustomProviders,
   buildOpenClawDefaultModelCommand,
@@ -209,6 +213,9 @@ function buildHermesModelConfig(defaultProvider = null, envVars = {}) {
     throw new Error("Default LLM provider is missing a provider id");
   }
 
+  // Built-in Headmaster relay provider: fixed tiers, credential by env reference.
+  if (providerId === HEADMASTER_PROVIDER_ID) return buildHeadmasterModelConfig();
+
   const savedConfig = normalizeProviderConfig(defaultProvider.config);
   const savedBaseUrl = pickProviderBaseUrl(savedConfig);
   const modelId =
@@ -383,6 +390,27 @@ async function buildOpenClawManagedEnvForAgent(
 }
 
 /**
+ * Managed-env entry that carries a Headmaster-managed runtime's relay key, so a
+ * container created before the key existed (or recreated with an older env)
+ * still authenticates. Derived from the stored gateway key; never persisted.
+ *
+ * @param {Object} row - Agent row with an encrypted `gateway_token`.
+ * @returns {Object} `HEADMASTER_INFERENCE_KEY` entry, or empty when no gateway key is stored.
+ */
+function headmasterInferenceEnvFor(row = {}) {
+  if (!row?.gateway_token) return {};
+  const { decrypt } = require("./crypto");
+  const {
+    HEADMASTER_INFERENCE_KEY_ENV,
+    deriveHeadmasterInferenceKey,
+  } = require("../agent-runtime/lib/headmasterInference");
+  const gatewayKey = decrypt(row.gateway_token);
+  return gatewayKey
+    ? { [HEADMASTER_INFERENCE_KEY_ENV]: deriveHeadmasterInferenceKey(gatewayKey) }
+    : {};
+}
+
+/**
  * Build Hermes managed environment variables from provider, endpoint,
  * persisted-channel, and integration sources. Channel and integration lookups
  * are best effort and may independently leave the result partial.
@@ -396,22 +424,32 @@ async function buildHermesManagedEnvForAgent(userId, agentId) {
   // environment would silently remove the runtime's account/memory identity.
   const headmaster = await db.query(
     `SELECT headmaster_owner_id, headmaster_workspace_id,
-            headmaster_memory_bank_id, headmaster_memory_gateway_url
+            headmaster_memory_bank_id, headmaster_memory_gateway_url,
+            external_namespace, gateway_token
        FROM agents WHERE id = $1 AND user_id = $2`,
     [agentId, userId],
   );
-  const headmasterEnvVars = require("./headmasterConfig").headmasterEnv(headmaster.rows[0]);
-  const llmKeys = await llmProviders.getProviderKeys(userId);
-  const overrides =
-    typeof llmProviders.getProviderEndpoints === "function"
+  const headmasterConfig = require("./headmasterConfig");
+  const headmasterEnvVars = headmasterConfig.headmasterEnv(headmaster.rows[0]);
+  // A Headmaster-managed runtime reaches its model through the Headmaster
+  // relay with a key derived from its own gateway key. The operator's provider
+  // keys and endpoint overrides never enter its environment.
+  const headmasterManaged = headmasterConfig.isHeadmasterManagedAgent(headmaster.rows[0]);
+  const headmasterInferenceEnvVars = headmasterManaged
+    ? headmasterInferenceEnvFor(headmaster.rows[0])
+    : {};
+  const llmKeys = headmasterManaged ? {} : await llmProviders.getProviderKeys(userId);
+  const overrides = headmasterManaged
+    ? { byEnvVar: {}, byProvider: {}, apiVersionByEnvVar: {}, apiVersionByProvider: {} }
+    : typeof llmProviders.getProviderEndpoints === "function"
       ? await llmProviders.getProviderEndpoints(userId)
       : { byEnvVar: {}, byProvider: {}, apiVersionByEnvVar: {}, apiVersionByProvider: {} };
   const baseUrlEnvVars =
-    typeof llmProviders.buildBaseUrlEnvVars === "function"
+    !headmasterManaged && typeof llmProviders.buildBaseUrlEnvVars === "function"
       ? llmProviders.buildBaseUrlEnvVars(overrides.byEnvVar || {})
       : {};
   const apiVersionEnvVars =
-    typeof llmProviders.buildApiVersionEnvVars === "function"
+    !headmasterManaged && typeof llmProviders.buildApiVersionEnvVars === "function"
       ? llmProviders.buildApiVersionEnvVars(overrides.apiVersionByEnvVar || {})
       : {};
 
@@ -437,6 +475,7 @@ async function buildHermesManagedEnvForAgent(userId, agentId) {
         ...baseUrlEnvVars,
         ...apiVersionEnvVars,
         ...headmasterEnvVars,
+        ...headmasterInferenceEnvVars,
       }).filter(([key, value]) => key && value != null && String(value) !== ""),
     );
   } catch {
@@ -447,6 +486,7 @@ async function buildHermesManagedEnvForAgent(userId, agentId) {
         ...baseUrlEnvVars,
         ...apiVersionEnvVars,
         ...headmasterEnvVars,
+        ...headmasterInferenceEnvVars,
       }).filter(([key, value]) => key && value != null && String(value) !== ""),
     );
   }
@@ -1078,12 +1118,21 @@ async function stageProviderAuthForStoppedAgent(userId, agent, options = {}) {
     }
 
     const envVars = await buildHermesManagedEnvForAgent(userId, agent.id);
-    const generatedModelConfig = buildHermesModelConfig(defaultProvider, envVars);
-    const selectedModelConfig = defaultProvider
-      ? persistedModelConfig
-        ? attachHermesCustomApiKey(persistedModelConfig, defaultProvider, envVars)
-        : generatedModelConfig
-      : null;
+    // A Headmaster-managed runtime takes the relay model, whatever the operator
+    // account's default provider or an older stored model block says.
+    const headmasterManaged = await require("./headmasterConfig").agentIsHeadmasterManaged(
+      agent.id,
+    );
+    const generatedModelConfig = headmasterManaged
+      ? buildHeadmasterModelConfig()
+      : buildHermesModelConfig(defaultProvider, envVars);
+    const selectedModelConfig = headmasterManaged
+      ? generatedModelConfig
+      : defaultProvider
+        ? persistedModelConfig
+          ? attachHermesCustomApiKey(persistedModelConfig, defaultProvider, envVars)
+          : generatedModelConfig
+        : null;
     await reconcileManagedRuntimeEnv(
       agent,
       {
@@ -1482,15 +1531,20 @@ async function syncAuthToUserAgents(userId, agentId = null, options = {}) {
         }
 
         const envVars = await buildHermesManagedEnvForAgent(userId, agent.id);
-        if (!persistedModelConfig && !hasHermesModelConfig) {
+        const headmasterManaged = await require("./headmasterConfig").agentIsHeadmasterManaged(
+          agent.id,
+        );
+        if (!headmasterManaged && !persistedModelConfig && !hasHermesModelConfig) {
           hermesModelConfig = buildHermesModelConfig(defaultProvider, envVars);
           hasHermesModelConfig = true;
         }
-        const selectedHermesModelConfig = defaultProvider
-          ? persistedModelConfig
-            ? attachHermesCustomApiKey(persistedModelConfig, defaultProvider, envVars)
-            : hermesModelConfig
-          : null;
+        const selectedHermesModelConfig = headmasterManaged
+          ? buildHeadmasterModelConfig()
+          : defaultProvider
+            ? persistedModelConfig
+              ? attachHermesCustomApiKey(persistedModelConfig, defaultProvider, envVars)
+              : hermesModelConfig
+            : null;
         if (
           onlyIfAuthPresent &&
           Object.keys(envVars).length === 0 &&

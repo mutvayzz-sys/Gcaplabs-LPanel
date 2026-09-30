@@ -18,6 +18,9 @@ const mockDb = { query: jest.fn() };
 jest.mock("../db", () => mockDb);
 
 const router = require("../routes/headmasterRuntimeIdentity");
+const {
+  deriveHeadmasterInferenceKey,
+} = require("../../agent-runtime/lib/headmasterInference");
 
 function buildApp() {
   const app = express();
@@ -121,6 +124,62 @@ describe("POST /integrations/headmaster/runtime-identity", () => {
       },
       credential_generation: "1",
       active: true,
+    });
+  });
+
+  describe("runtime_key_kind inference", () => {
+    const inferenceKey = deriveHeadmasterInferenceKey(RUNTIME_KEY);
+    const agentRows = () => ({
+      rows: [
+        {
+          id: "agent-1",
+          gateway_token: RUNTIME_KEY,
+          external_id: EXTERNAL_ID,
+          external_owner_uuid: OWNER_UUID,
+        },
+      ],
+    });
+
+    test("resolves the agent whose derived inference key matches", async () => {
+      mockDb.query.mockResolvedValueOnce(agentRows());
+      const res = await request(buildApp())
+        .post("/integrations/headmaster/runtime-identity")
+        .set("authorization", `Bearer ${SERVICE_TOKEN}`)
+        .send({ runtime_key_sha256: sha256Hex(inferenceKey), runtime_key_kind: "inference" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.agent_id).toBe("agent-1");
+      expect(res.body.external_identity.owner_uuid).toBe(OWNER_UUID);
+    });
+
+    test("the gateway key digest does not resolve as an inference credential", async () => {
+      mockDb.query.mockResolvedValueOnce(agentRows());
+      const res = await request(buildApp())
+        .post("/integrations/headmaster/runtime-identity")
+        .set("authorization", `Bearer ${SERVICE_TOKEN}`)
+        .send({ runtime_key_sha256: sha256Hex(RUNTIME_KEY), runtime_key_kind: "inference" });
+
+      expect(res.status).toBe(404);
+    });
+
+    test("the inference key digest does not resolve as a gateway credential", async () => {
+      mockDb.query.mockResolvedValueOnce(agentRows());
+      const res = await request(buildApp())
+        .post("/integrations/headmaster/runtime-identity")
+        .set("authorization", `Bearer ${SERVICE_TOKEN}`)
+        .send({ runtime_key_sha256: sha256Hex(inferenceKey) });
+
+      expect(res.status).toBe(404);
+    });
+
+    test("rejects an unknown key kind before touching the database", async () => {
+      const res = await request(buildApp())
+        .post("/integrations/headmaster/runtime-identity")
+        .set("authorization", `Bearer ${SERVICE_TOKEN}`)
+        .send({ runtime_key_sha256: sha256Hex(inferenceKey), runtime_key_kind: "admin" });
+
+      expect(res.status).toBe(400);
+      expect(mockDb.query).not.toHaveBeenCalled();
     });
   });
 

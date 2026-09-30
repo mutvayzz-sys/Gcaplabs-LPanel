@@ -27,6 +27,7 @@ const express = require("express");
 const crypto = require("crypto");
 const db = require("../db");
 const { decrypt } = require("../crypto");
+const { deriveHeadmasterInferenceKey } = require("../../agent-runtime/lib/headmasterInference");
 
 const router = express.Router();
 
@@ -65,6 +66,14 @@ router.post("/runtime-identity", async (req, res) => {
     return res.status(400).json({ error: "runtime_key_sha256 must be a SHA-256 hex digest" });
   }
 
+  // `runtime_key_kind: "inference"` looks the digest up against the credential a
+  // runtime presents to the managed inference relay, which is derived from its
+  // gateway key. The default kind is the gateway key itself (memory gateway).
+  const kind = req.body?.runtime_key_kind ?? "gateway";
+  if (kind !== "gateway" && kind !== "inference") {
+    return res.status(400).json({ error: 'runtime_key_kind must be "gateway" or "inference"' });
+  }
+
   const { rows } = await db.query(
     `SELECT id, gateway_token, external_id, external_owner_uuid
        FROM agents
@@ -82,7 +91,8 @@ router.post("/runtime-identity", async (req, res) => {
       continue; // corrupted/undecryptable row -- never a match, never a 500
     }
     if (!plaintext) continue;
-    const candidate = crypto.createHash("sha256").update(plaintext).digest("hex");
+    const presented = kind === "inference" ? deriveHeadmasterInferenceKey(plaintext) : plaintext;
+    const candidate = crypto.createHash("sha256").update(presented).digest("hex");
     if (timingSafeEqual(candidate, digest)) {
       return res.json({
         agent_id: row.id,

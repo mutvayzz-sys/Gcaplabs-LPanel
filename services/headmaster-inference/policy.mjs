@@ -157,6 +157,24 @@ export function allowedModelsForProvider(mapping, providerMetadataModels = []) {
   );
 }
 
+// Branded tier ids clients may name. The relay resolves a tier to the account's
+// assigned backend model here, so every client (the desktop's Work engine and a
+// Cloud runtime) can register the same three fixed names without knowing what
+// stands behind them. All three resolve to the first allowed model until the
+// operator assigns tiers to distinct backend models. Keep this list equal to
+// agent-runtime/lib/headmasterInference.ts and the desktop's
+// headmaster-trial-provider.ts.
+export const HEADMASTER_TIER_MODELS = Object.freeze([
+  "headmaster-lite",
+  "headmaster-pro",
+  "headmaster-max",
+]);
+
+export function resolveTierModel(model, allowedModels) {
+  if (!HEADMASTER_TIER_MODELS.includes(model)) return model;
+  return allowedModels[0] ?? model;
+}
+
 export function prepareChatCompletion(body, mapping, providerMetadataModels, limits = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "body_invalid" };
   if (Object.keys(body).some((key) => CLIENT_AUTHORITY_FIELDS.has(key.toLowerCase()))) {
@@ -168,7 +186,8 @@ export function prepareChatCompletion(body, mapping, providerMetadataModels, lim
     return { error: "stream_invalid" };
   if (typeof body.model !== "string" || !body.model) return { error: "model_required" };
   const allowedModels = allowedModelsForProvider(mapping, providerMetadataModels);
-  if (!allowedModels.includes(body.model)) return { error: "model_not_allowed" };
+  const resolvedModel = resolveTierModel(body.model, allowedModels);
+  if (!allowedModels.includes(resolvedModel)) return { error: "model_not_allowed" };
 
   const limited = limitCompletionTokens(body, mapping.provider, limits);
   if (limited.error) return limited;
@@ -186,7 +205,7 @@ function limitCompletionTokens(body, providerName, limits = {}) {
     Number.isSafeInteger(limits.defaultCompletionTokens) && limits.defaultCompletionTokens > 0
       ? Math.min(limits.defaultCompletionTokens, maxCompletionTokens)
       : Math.min(1024, maxCompletionTokens);
-  const request = { ...body };
+  const request = { ...body, model: resolvedModel };
   const supplied = ["max_completion_tokens", "max_tokens"]
     .filter((field) => body[field] !== undefined)
     .map((field) => body[field]);

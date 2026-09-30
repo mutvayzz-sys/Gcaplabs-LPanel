@@ -177,7 +177,9 @@ export function createSupabaseAssignmentResolver({
         ),
       timeoutMs,
     );
-    timer.unref?.();
+    // Not unref'd: the finally block always clears it, and an unref'd deadline
+    // lets the process exit with the lookup unresolved when nothing else holds
+    // the event loop (a stalled fetch stub, or a socket that has gone quiet).
     try {
       let response;
       try {
