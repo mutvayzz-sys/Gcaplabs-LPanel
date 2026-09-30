@@ -713,6 +713,34 @@ export function createInferenceService({
           requestId,
         );
     }
+    // Resolve the key before taking a quota slot: a request for a provider with
+    // no stored key (or while the store is unavailable) must not spend the
+    // account's hourly budget or a concurrency slot.
+    let apiKey;
+    try {
+      apiKey = await resolveOwnKey(claims.sub.toLowerCase(), provider);
+    } catch (error) {
+      logger.warn?.("headmaster-inference own key unavailable", {
+        requestId,
+        provider,
+        code: error?.code || "own_key_unavailable",
+      });
+      return safeError(
+        res,
+        503,
+        "own_key_unavailable",
+        "Your API key is temporarily unavailable.",
+        requestId,
+      );
+    }
+    if (typeof apiKey !== "string" || !apiKey)
+      return safeError(
+        res,
+        404,
+        "provider_key_missing",
+        "No API key is stored for this provider.",
+        requestId,
+      );
     const reservation = await byoQuotaStore
       .acquire({ ownerId: claims.sub, requestId, reserveOutputTokens: 0 })
       .catch((error) => {
@@ -758,31 +786,6 @@ export function createInferenceService({
     req.socket?.once("close", onClose);
     res.once("close", onClose);
     try {
-      let apiKey;
-      try {
-        apiKey = await resolveOwnKey(claims.sub.toLowerCase(), provider);
-      } catch (error) {
-        logger.warn?.("headmaster-inference own key unavailable", {
-          requestId,
-          provider,
-          code: error?.code || "own_key_unavailable",
-        });
-        return safeError(
-          res,
-          503,
-          "own_key_unavailable",
-          "Your API key is temporarily unavailable.",
-          requestId,
-        );
-      }
-      if (typeof apiKey !== "string" || !apiKey)
-        return safeError(
-          res,
-          404,
-          "provider_key_missing",
-          "No API key is stored for this provider.",
-          requestId,
-        );
       const streaming = !isModels && prepared.body.stream === true;
       const upstream = await fetchImpl(target, {
         method: isModels ? "GET" : "POST",
