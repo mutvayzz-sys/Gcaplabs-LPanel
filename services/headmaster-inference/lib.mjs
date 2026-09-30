@@ -647,7 +647,7 @@ export function createInferenceService({
     if (upstreamStatus === 401 || upstreamStatus === 403)
       return safeError(
         res,
-        502,
+        400,
         "own_key_rejected",
         "The model provider rejected your API key.",
         requestId,

@@ -81,7 +81,9 @@ export function verifyAssertion(
   const nowSeconds = Math.floor(now() / 1000);
   if (
     !claims ||
-    claims.v !== 1 ||
+    // v1 = operator requests; v2 = personal-key requests. An old relay rejects v2, so
+    // an own-key request can never be served with an operator key.
+    !(claims.v === 1 ? claims.byo_provider === undefined : claims.v === 2 && typeof claims.byo_provider === "string") ||
     claims.aud !== ASSERTION_AUDIENCE ||
     !OWNER_UUID.test(String(claims.sub || "")) ||
     !/^\d{1,20}$/.test(String(claims.authorization_revision ?? "")) ||

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomBytes, randomUUID } from "node:crypto";
-import { ASSERTION_AUDIENCE, sha256, signAssertion } from "./assertion.mjs";
+import { ASSERTION_AUDIENCE, sha256, signAssertion, verifyAssertion } from "./assertion.mjs";
 import { createProviderKeyResolver } from "./byo.mjs";
 import { createInferenceService } from "./lib.mjs";
 import { createMemoryByoQuotaStore, createMemoryQuotaStore } from "./quota.mjs";
@@ -19,7 +19,7 @@ function token({ method, path, body = Buffer.alloc(0), extra = {}, owner = OWNER
   const iat = Math.floor(NOW / 1000);
   return signAssertion(
     {
-      v: 1,
+      v: extra.byo_provider === undefined ? 1 : 2,
       aud: ASSERTION_AUDIENCE,
       sub: owner,
       authorization_revision: "3",
@@ -209,8 +209,10 @@ test("byo chat: model id regex, client authority fields, token cap enforced", as
 test("unknown or malformed byo_provider claim is rejected 400 without any lookup", async (t) => {
   const { models, chat, state } = await setup(t);
   for (const claim of ["anthropic", "custom", 7, null, "", "__proto__", "constructor"]) {
-    assert.equal((await models({ byo_provider: claim })).status, 400);
-    assert.equal((await chat(CHAT, { byo_provider: claim })).status, 400);
+    // Non-string claims fail assertion verification (401); unknown strings are 400.
+    const expected = typeof claim === "string" ? 400 : 401;
+    assert.equal((await models({ byo_provider: claim })).status, expected);
+    assert.equal((await chat(CHAT, { byo_provider: claim })).status, expected);
   }
   assert.equal(state.supabaseCalls, 0);
   assert.equal(state.providerCalls.length, 0);
@@ -313,7 +315,7 @@ test("provider 401/403 maps to own_key_rejected without relaying the provider bo
     });
     for (const res of [await models(), await chat(CHAT)]) {
       const text = await res.text();
-      assert.equal(res.status, 502);
+      assert.equal(res.status, 400);
       assert.equal(JSON.parse(text).error.code, "own_key_rejected");
       assert.ok(!text.includes(USER_KEY) && !text.includes("Incorrect"));
     }
@@ -460,4 +462,13 @@ test("operator requests (no byo claim) still use assignments and never the byo p
     ["gpt-5.5"],
   );
   assert.equal(assignments, 1);
+});
+
+test("assertion versions: v2 needs byo_provider, v1 must not carry it", () => {
+  const base = { aud: ASSERTION_AUDIENCE, sub: OWNER, authorization_revision: "3", method: "GET", path: "/v1/models", body_sha256: sha256(Buffer.alloc(0)), request_id: randomUUID(), nonce: randomBytes(16).toString("base64url"), iat: Math.floor(NOW / 1000), exp: Math.floor(NOW / 1000) + 20 };
+  const check = (claims) => verifyAssertion(signAssertion(claims, ASSERTION_SECRET), { secret: ASSERTION_SECRET, method: "GET", path: "/v1/models", body: Buffer.alloc(0), now: () => NOW });
+  assert.ok(check({ ...base, v: 1 }));
+  assert.ok(check({ ...base, v: 2, byo_provider: "openai" }));
+  assert.equal(check({ ...base, v: 1, byo_provider: "openai" }), null);
+  assert.equal(check({ ...base, v: 2 }), null);
 });

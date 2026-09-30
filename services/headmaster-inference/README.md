@@ -156,7 +156,7 @@ the same signed assertion plus an extra claim `byo_provider: <provider>`.
   matching `^[A-Za-z0-9._:/@+-]{1,128}$` (the tested-model catalogue does not
   apply); token caps, body size, response size, streaming and timeouts are the
   operator path's.
-- Provider 401/403 becomes `502 own_key_rejected`; other provider errors use the
+- Provider 401/403 becomes `400 own_key_rejected`; other provider errors use the
   same sanitized mapping as the operator path. Provider error bodies are never
   relayed.
 - Limits are separate from the operator budgets (distinct Redis prefix
