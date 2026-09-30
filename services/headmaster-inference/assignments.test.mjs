@@ -378,8 +378,14 @@ test("an owner with no assignment row gets the configured default; an explicit r
   const absent = makeResolverWithDefault(async () => jsonResponse([]), DEFAULT_ASSIGNMENT);
   assert.deepEqual(await absent.resolveAssignment(OWNER), DEFAULT_ASSIGNMENT);
 
-  const explicit = makeResolverWithDefault(async () => jsonResponse([assignmentRow()]), DEFAULT_ASSIGNMENT);
-  assert.deepEqual(await explicit.resolveAssignment(OWNER), { noraUserId: NORA_USER, providerId: PROVIDER });
+  const explicit = makeResolverWithDefault(
+    async () => jsonResponse([assignmentRow()]),
+    DEFAULT_ASSIGNMENT,
+  );
+  assert.deepEqual(await explicit.resolveAssignment(OWNER), {
+    noraUserId: NORA_USER,
+    providerId: PROVIDER,
+  });
 
   const disabled = makeResolverWithDefault(
     async () => jsonResponse([assignmentRow({ enabled: false })]),
@@ -412,7 +418,10 @@ test("the default assignment comes from two env settings that must be set togeth
     DEFAULT_ASSIGNMENT,
   );
   assert.throws(
-    () => defaultAssignmentFromEnv({ HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID: DEFAULT_ASSIGNMENT.providerId }),
+    () =>
+      defaultAssignmentFromEnv({
+        HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID: DEFAULT_ASSIGNMENT.providerId,
+      }),
     { code: "assignment_config_invalid" },
   );
   assert.throws(
