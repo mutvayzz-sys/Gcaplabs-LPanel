@@ -14,6 +14,8 @@ import { createInferenceService } from "./lib.mjs";
 import { createMemoryQuotaStore, createRedisQuotaStore } from "./quota.mjs";
 import {
   HEADMASTER_TIER_MODELS,
+  openRouterModelId,
+  tierAssignments,
   parseAccountProviderMap,
   providerCompletionUrl,
 } from "./policy.mjs";
@@ -381,6 +383,26 @@ test("a Headmaster tier id resolves to the account's assigned model before the p
     ["gpt-5.5", "gpt-5.5", "gpt-5.5"],
   );
   assert.deepEqual(HEADMASTER_TIER_MODELS, ["headmaster-lite", "headmaster-pro", "headmaster-max"]);
+});
+
+test("the model list reports which backing model each tier resolves to, in OpenRouter form", async (t) => {
+  const f = await startService(t, {});
+  const response = await getModels(f.origin, makeToken({ method: "GET", path: "/v1/models" }));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(Object.keys(body.headmaster_tiers), HEADMASTER_TIER_MODELS);
+  for (const tier of HEADMASTER_TIER_MODELS) {
+    assert.deepEqual(body.headmaster_tiers[tier], { model: "gpt-5.5", openrouter_id: "openai/gpt-5.5" });
+  }
+});
+
+test("tier assignments map providers to OpenRouter ids only when certain, and report nothing without a model", () => {
+  assert.equal(openRouterModelId("openai", "gpt-5.5"), "openai/gpt-5.5");
+  assert.equal(openRouterModelId("xai", "grok-4"), "x-ai/grok-4");
+  assert.equal(openRouterModelId("openrouter", "deepseek/deepseek-v4.1-flash"), "deepseek/deepseek-v4.1-flash");
+  assert.equal(openRouterModelId("groq", "llama-3.3-70b-versatile"), null);
+  assert.equal(openRouterModelId("openai", ""), null);
+  assert.deepEqual(tierAssignments("openai", [])["headmaster-max"], { model: null, openrouter_id: null });
 });
 
 test("a tier id never widens the model allowlist", async (t) => {
