@@ -79,10 +79,12 @@ const {
   deleteHermesChannel,
   listHermesChannels,
   persistHermesMemoryProviderConfig,
+  persistHermesModelConfig,
   readHermesRuntimeSnapshot,
   saveHermesChannel,
   testHermesChannel,
 } = require("../hermesUi");
+const { buildHeadmasterModelConfig } = require("../../agent-runtime/lib/headmasterInference");
 const {
   isProviderAuthStatusHoldReason,
   runContainerCommand,
@@ -2583,10 +2585,28 @@ router.post(
       }
     }
 
+    // A Headmaster runtime takes its model from the Headmaster relay. Stamp it
+    // now so a runtime created or recreated with an older model block (an
+    // operator provider, no relay key) is corrected without waiting for a
+    // provider sync. Idempotent: a tier the user already chose is kept.
+    // Best-effort for the same reason as the memory stamp above.
+    let inferenceStamp;
+    if (namespace === "headmaster" && buildAgentRuntimeFields(updated.rows[0]).runtime_family === "hermes") {
+      try {
+        inferenceStamp = await persistHermesModelConfig(
+          updated.rows[0],
+          buildHeadmasterModelConfig(),
+        );
+      } catch (error) {
+        inferenceStamp = { ok: false, error: error?.message || String(error) };
+      }
+    }
+
     res.json({
       ...serializeAgent(updated.rows[0]),
       adopted: true,
       ...(memoryStamp ? { memory: memoryStamp } : {}),
+      ...(inferenceStamp ? { inference: inferenceStamp } : {}),
     });
   }),
 );
