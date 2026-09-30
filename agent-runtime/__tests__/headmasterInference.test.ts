@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "tsx/cjs";
 
@@ -254,5 +254,37 @@ describe("container bootstrap writes the managed model block", () => {
       api_key: "user-key",
     });
     expect(config).not.toHaveProperty("providers");
+  });
+});
+
+describe("headmasterInferenceBaseUrl memoization", () => {
+  it("re-reads when the env value changes and skips re-parsing when unchanged", () => {
+    const URLCtor = global.URL;
+    const spy = vi.fn();
+    global.URL = class extends URLCtor {
+      constructor(...args) {
+        super(...args);
+        spy(...args);
+      }
+    };
+    try {
+      const a = { HEADMASTER_INFERENCE_BASE_URL: "https://memo-a.example/v1/" };
+      expect(headmasterInferenceBaseUrl(a)).toBe("https://memo-a.example/v1");
+      const calls = spy.mock.calls.length;
+      expect(headmasterInferenceBaseUrl({ ...a })).toBe("https://memo-a.example/v1");
+      expect(spy.mock.calls.length).toBe(calls);
+      expect(headmasterInferenceBaseUrl({ HEADMASTER_INFERENCE_BASE_URL: "https://memo-b.example/v1" })).toBe(
+        "https://memo-b.example/v1",
+      );
+      expect(spy.mock.calls.length).toBeGreaterThan(calls);
+    } finally {
+      global.URL = URLCtor;
+    }
+  });
+
+  it("does not cache invalid values", () => {
+    const bad = { HEADMASTER_INFERENCE_BASE_URL: "http://insecure.example" };
+    expect(() => headmasterInferenceBaseUrl(bad)).toThrow();
+    expect(() => headmasterInferenceBaseUrl(bad)).toThrow();
   });
 });

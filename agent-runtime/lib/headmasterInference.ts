@@ -49,6 +49,8 @@ function deriveHeadmasterInferenceKey(apiServerKey) {
   return crypto.createHmac("sha256", apiServerKey).update(INFERENCE_KEY_LABEL).digest("hex");
 }
 
+let baseUrlCache = { raw: null, result: null };
+
 /**
  * Resolve the relay base URL as reachable from a runtime container.
  *
@@ -57,6 +59,9 @@ function deriveHeadmasterInferenceKey(apiServerKey) {
  */
 function headmasterInferenceBaseUrl(env = process.env) {
   const raw = String(env?.HEADMASTER_INFERENCE_BASE_URL || "").trim();
+  // Memoize the validated result keyed on the raw string, so an env change is
+  // still picked up. Only successes are cached; invalid values re-throw.
+  if (raw === baseUrlCache.raw && baseUrlCache.result !== null) return baseUrlCache.result;
   const value = raw || HEADMASTER_INFERENCE_DEFAULT_BASE_URL;
   let parsed;
   try {
@@ -67,7 +72,9 @@ function headmasterInferenceBaseUrl(env = process.env) {
   if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search) {
     throw new Error("HEADMASTER_INFERENCE_BASE_URL must be a plain https URL");
   }
-  return value.replace(/\/+$/, "");
+  const result = value.replace(/\/+$/, "");
+  baseUrlCache = { raw, result };
+  return result;
 }
 
 /**
