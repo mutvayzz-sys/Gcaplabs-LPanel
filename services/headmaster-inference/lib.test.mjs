@@ -1002,3 +1002,41 @@ test("the inference service accepts exactly one assignment source", () => {
     /inference_service_dependencies_invalid/,
   );
 });
+
+test("an owner on the default assignment sees and may use the default Lite tier only", async (t) => {
+  const upstreamCalls = [];
+  const f = await startService(t, {
+    accountProviderMap: undefined,
+    resolveAssignment: async () => ({
+      noraUserId: NORA_USER_A,
+      providerId: PROVIDER_A,
+      tier: "headmaster-lite",
+    }),
+    fetchImpl: async (url, options) => {
+      upstreamCalls.push(JSON.parse(options.body));
+      return new Response('{"id":"c1","choices":[]}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const models = await (
+    await getModels(f.origin, makeToken({ method: "GET", path: "/v1/models" }))
+  ).json();
+  assert.deepEqual(Object.keys(models.headmaster_tiers), ["headmaster-lite"]);
+
+  for (const [model, status] of [
+    ["headmaster-pro", 400],
+    ["headmaster-max", 400],
+    ["gpt-5.5-pro", 400],
+    ["headmaster-lite", 200],
+  ]) {
+    const body = Buffer.from(
+      JSON.stringify({ model, messages: [{ role: "user", content: "hi" }] }),
+    );
+    const token = makeToken({ method: "POST", path: "/v1/chat/completions", body });
+    assert.equal((await postCompletion(f.origin, body, token)).status, status, model);
+  }
+  assert.equal(upstreamCalls.length, 1);
+  assert.equal(upstreamCalls[0].model, "gpt-5.5");
+});

@@ -64,7 +64,7 @@ to that pair, so a newly approved account can chat on the Headmaster tiers with 
 admin step. Admission signs a relay assertion only for an approved account, so
 this does not open the relay to anyone else. A row still wins over the default, an
 explicitly disabled row (`enabled = false`) still denies, and a lookup failure never
-falls back to the default. Leaving both unset keeps the old rule that absence of a
+falls back to the default. An owner served by the default may use the `headmaster-lite` tier only (the model list shows only that tier and Pro/Max/other model ids get 400); a row of their own unlocks the rest. Each use is logged as `default assignment used` with the owner id and a running count, nothing else. Admission checks entitlement and the runtime before it signs anything, so a revoked account or runtime is refused even with no row (covered by a webapp admission test). Leaving both unset keeps the old rule that absence of a
 row denies.
 
 TTL and revocation semantics:
