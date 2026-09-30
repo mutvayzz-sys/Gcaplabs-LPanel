@@ -376,7 +376,10 @@ function makeResolverWithDefault(responder, defaultAssignment, logger) {
 
 test("an owner with no assignment row gets the configured default; an explicit row wins; a disabled row still denies", async () => {
   const absent = makeResolverWithDefault(async () => jsonResponse([]), DEFAULT_ASSIGNMENT);
-  assert.deepEqual(await absent.resolveAssignment(OWNER), DEFAULT_ASSIGNMENT);
+  assert.deepEqual(await absent.resolveAssignment(OWNER), {
+    ...DEFAULT_ASSIGNMENT,
+    tier: "headmaster-lite",
+  });
 
   const explicit = makeResolverWithDefault(
     async () => jsonResponse([assignmentRow()]),
@@ -440,4 +443,18 @@ test("the default assignment comes from two env settings that must be set togeth
     HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID: DEFAULT_ASSIGNMENT.providerId,
   });
   assert.equal(configured.mode, "supabase");
+});
+
+test("each use of the default is logged with the owner id and a count only", async () => {
+  const logs = [];
+  const logger = { info: (...args) => logs.push(args), warn() {}, error() {} };
+  const resolver = makeResolverWithDefault(async () => jsonResponse([]), DEFAULT_ASSIGNMENT, logger);
+  await resolver.resolveAssignment(OWNER);
+  await resolver.resolveAssignment(OWNER);
+  assert.deepEqual(logs, [
+    ["headmaster-inference default assignment used", { ownerId: OWNER, uses: 1 }],
+    ["headmaster-inference default assignment used", { ownerId: OWNER, uses: 2 }],
+  ]);
+  assert.equal(JSON.stringify(logs).includes(DEFAULT_ASSIGNMENT.noraUserId), false);
+  assert.equal(JSON.stringify(logs).includes(DEFAULT_ASSIGNMENT.providerId), false);
 });

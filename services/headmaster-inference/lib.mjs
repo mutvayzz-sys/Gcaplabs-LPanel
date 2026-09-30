@@ -180,6 +180,11 @@ async function readProviderResponse(response, cap) {
   return Buffer.concat(chunks);
 }
 
+function onlyTier(tiers, tier) {
+  if (!tier) return tiers;
+  return Object.fromEntries(Object.entries(tiers).filter(([name]) => name === tier));
+}
+
 function modelList(models, requestId, tiers = undefined) {
   return {
     object: "list",
@@ -384,6 +389,10 @@ export function createInferenceService({
     const effectiveMapping =
       mapping.provider === undefined ? { ...mapping, provider: provider.provider } : mapping;
 
+    // An owner served by the default assignment (no row of their own) gets the
+    // default tier only; a row of their own is what unlocks the other tiers.
+    const tierOnly = typeof effectiveMapping.tier === "string" ? effectiveMapping.tier : null;
+
     if (req.method === "GET") {
       const models = allowedModelsForProvider(effectiveMapping, provider.models);
       if (models.length === 0)
@@ -397,7 +406,7 @@ export function createInferenceService({
       return sendJson(
         res,
         200,
-        modelList(models, claims.request_id, tierAssignments(effectiveMapping.provider, models)),
+        modelList(models, claims.request_id, onlyTier(tierAssignments(effectiveMapping.provider, models), tierOnly)),
         claims.request_id,
       );
     }
@@ -411,6 +420,15 @@ export function createInferenceService({
         400,
         "body_invalid",
         "Request body must be valid JSON.",
+        claims.request_id,
+      );
+    }
+    if (tierOnly && parsed?.model !== tierOnly) {
+      return safeError(
+        res,
+        400,
+        "model_not_allowed",
+        "This account can use the default Headmaster tier only.",
         claims.request_id,
       );
     }

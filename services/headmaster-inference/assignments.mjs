@@ -17,6 +17,8 @@ export const ASSIGNMENT_SELECT = "owner_id,nora_user_id,provider_id,enabled,revi
 // surface and is rejected without buffering it in full.
 export const ASSIGNMENT_MAX_BODY_BYTES = 65_536;
 const ASSIGNMENT_PATH = "/rest/v1/headmaster_inference_assignments";
+// The tier an owner without an assignment row is limited to.
+export const DEFAULT_ASSIGNMENT_TIER = "headmaster-lite";
 const quietLogger = { info() {}, warn() {}, error() {} };
 
 function assignmentError(message, code) {
@@ -132,7 +134,7 @@ function normalizeDefaultAssignment(value) {
       "assignment_config_invalid",
     );
   }
-  return Object.freeze({ noraUserId, providerId });
+  return Object.freeze({ noraUserId, providerId, tier: DEFAULT_ASSIGNMENT_TIER });
 }
 
 // HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID and _PROVIDER_ID together, or neither.
@@ -194,6 +196,7 @@ export function createSupabaseAssignmentResolver({
   }
 
   const cache = new Map();
+  const defaultUses = new Map();
 
   async function fetchAssignmentRow(ownerId) {
     const url = `${base}${ASSIGNMENT_PATH}?owner_id=eq.${ownerId}&limit=2&select=${ASSIGNMENT_SELECT}`;
@@ -293,7 +296,14 @@ export function createSupabaseAssignmentResolver({
   // never write the cache and an expired entry is never served: a revoked,
   // replaced, or reapproved assignment is honored within the bounded TTL.
   function applyRow(ownerId, row) {
-    if (!row) return fallback;
+    if (!row) {
+      if (!fallback) return null;
+      // Owner id and a running count only: never the provider, user or key ids.
+      const uses = (defaultUses.get(ownerId) ?? 0) + 1;
+      defaultUses.set(ownerId, uses);
+      logger.info?.("headmaster-inference default assignment used", { ownerId, uses });
+      return fallback;
+    }
     if (!row.enabled) {
       logger.warn?.("headmaster-inference assignment revoked", { ownerId, revision: row.revision });
       return null;
