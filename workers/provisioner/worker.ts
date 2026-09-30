@@ -1,6 +1,13 @@
 // @ts-nocheck
 const { UnrecoverableError, Worker } = require("bullmq");
 const { randomBytes } = require("crypto");
+const {
+  HEADMASTER_APPLY_MODEL_PY,
+  HEADMASTER_MANAGED_MARKER,
+  HEADMASTER_PROVIDER_ID,
+  buildHeadmasterModelConfig,
+  buildHeadmasterProviderRow,
+} = require("../../agent-runtime/lib/headmasterInference");
 const { decrypt: decryptProvisionerSecret } = require("./crypto");
 const IORedis = require("ioredis");
 const { Client, Pool } = require("pg");
@@ -1083,6 +1090,9 @@ function buildHermesModelConfig(defaultProvider = null, envVars = {}) {
     throw new Error("Default LLM provider is missing a provider id");
   }
 
+  // Built-in Headmaster relay provider: fixed tiers, credential by env reference.
+  if (providerId === HEADMASTER_PROVIDER_ID) return buildHeadmasterModelConfig();
+
   const savedConfig = normalizeProviderConfig(defaultProvider.config);
   const savedBaseUrl = pickProviderBaseUrl(savedConfig);
   const modelId =
@@ -1534,6 +1544,7 @@ def repair_surrogates(value):
         }
     return value
 
+${HEADMASTER_APPLY_MODEL_PY}
 payload = json.loads(${JSON.stringify(payloadJson)})
 config = repair_surrogates(load_config() or {})
 current_model = config.get("model")
@@ -1545,28 +1556,32 @@ base_url = str(payload.get("baseUrl") or "").strip()
 api_key_present = "apiKey" in payload or "api_key" in payload
 api_key = str(payload.get("apiKey") or payload.get("api_key") or "").strip()
 
-if default_model:
-    model["default"] = default_model
+if payload.get("managed") == ${JSON.stringify(HEADMASTER_MANAGED_MARKER)}:
+    if apply_headmaster_model(config, payload):
+        model = dict(config["model"])
 else:
-    model.pop("default", None)
-
-if provider:
-    model["provider"] = provider
-else:
-    model.pop("provider", None)
-
-if base_url:
-    model["base_url"] = base_url
-else:
-    model.pop("base_url", None)
-
-if api_key_present:
-    if api_key:
-        model["api_key"] = api_key
+    if default_model:
+        model["default"] = default_model
     else:
+        model.pop("default", None)
+
+    if provider:
+        model["provider"] = provider
+    else:
+        model.pop("provider", None)
+
+    if base_url:
+        model["base_url"] = base_url
+    else:
+        model.pop("base_url", None)
+
+    if api_key_present:
+        if api_key:
+            model["api_key"] = api_key
+        else:
+            model.pop("api_key", None)
+    elif provider and provider != "custom":
         model.pop("api_key", None)
-elif provider and provider != "custom":
-    model.pop("api_key", None)
 
 if model:
     config["model"] = model
@@ -1693,10 +1708,18 @@ async function fetchEffectiveProviderState(
   agentId = null,
   { runtimeFamily = "openclaw" } = {},
 ) {
+  // A Headmaster-managed Hermes runtime takes its model from the Headmaster
+  // relay: no operator provider key or default provider row reaches it.
+  const headmasterManaged =
+    String(runtimeFamily).toLowerCase() === "hermes" &&
+    Boolean(agentId) &&
+    (await require("../../backend-api/headmasterConfig").agentIsHeadmasterManaged(agentId, db));
   const [providerEnvVars, defaultProvider, integrationEnvVars, mcpRuntimeState, integrationSync] =
     await Promise.all([
-      fetchUserLlmEnvVars(userId, providerId),
-      fetchDeploymentProvider(userId, providerId),
+      headmasterManaged ? Promise.resolve({}) : fetchUserLlmEnvVars(userId, providerId),
+      headmasterManaged
+        ? Promise.resolve(buildHeadmasterProviderRow())
+        : fetchDeploymentProvider(userId, providerId),
       agentId ? getIntegrationEnvVars(agentId) : Promise.resolve({}),
       agentId && String(runtimeFamily).toLowerCase() === "openclaw"
         ? mcpServers.getEnabledMcpRuntimeState(agentId)
@@ -2596,9 +2619,10 @@ async function reconcileRuntimeLlmAuth({
       }
     }
 
-    const modelConfig = persistedModelConfig
-      ? attachHermesCustomApiKey(persistedModelConfig, defaultProvider, llmEnvVars)
-      : buildHermesModelConfig(defaultProvider, llmEnvVars);
+    const modelConfig =
+      persistedModelConfig && defaultProvider?.provider !== HEADMASTER_PROVIDER_ID
+        ? attachHermesCustomApiKey(persistedModelConfig, defaultProvider, llmEnvVars)
+        : buildHermesModelConfig(defaultProvider, llmEnvVars);
     if (modelConfig) {
       await runProvisionerExecCommand(
         provisioner,
@@ -5663,12 +5687,15 @@ healthServer.listen(HEALTH_PORT, () => {
 module.exports = {
   allocateAvailableLocalDockerGatewayPort,
   assertProvisionerRuntimeSelection,
+  buildHermesModelConfig,
+  buildHermesModelConfigWriteCommand,
   buildProvisionerExecCleanupCommand,
   buildTrackedProvisionerCommand,
   buildUnresolvedRuntimeError,
   cleanupProvisionedRuntimeAfterFailure,
   failDeploymentForUnresolvedRuntime,
   fetchDeploymentProvider,
+  fetchEffectiveProviderState,
   fetchWithProvisionerAuthorization,
   fetchUserLlmEnvVars,
   guardRemoteProvisioner,

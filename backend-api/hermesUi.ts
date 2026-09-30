@@ -6,6 +6,12 @@ const { runContainerCommand } = require("./authSync");
 const { waitForAgentReadiness } = require("./healthChecks");
 const { assertRemoteHostAgentUse } = require("./remoteHosts");
 const { buildHermesRuntimeBootstrapEnv } = require("../agent-runtime/lib/hermesRuntimeBootstrap");
+const {
+  HEADMASTER_APPLY_MODEL_PY,
+  HEADMASTER_MANAGED_MARKER,
+  HEADMASTER_PROVIDER_ID,
+  buildHeadmasterModelConfig,
+} = require("../agent-runtime/lib/headmasterInference");
 
 const HERMES_CHANNEL_REDACTED = "[REDACTED]";
 
@@ -450,6 +456,10 @@ function decryptHermesStoredChannelConfig(definition, config = {}) {
 
 function normalizeHermesModelConfig(modelConfig = {}) {
   if (!modelConfig || typeof modelConfig !== "object") return {};
+  // The managed Headmaster provider is regenerated, never replayed from stored
+  // fields, so a replayed model block always carries its provider entry and the
+  // environment reference for its key.
+  if (modelConfig.provider === HEADMASTER_PROVIDER_ID) return buildHeadmasterModelConfig();
   return {
     defaultModel:
       typeof modelConfig.defaultModel === "string" && modelConfig.defaultModel.trim()
@@ -732,6 +742,7 @@ from pathlib import Path
 
 from hermes_cli.config import get_config_path, load_config, save_config
 ${HERMES_REPAIR_SURROGATES_PY}
+${HEADMASTER_APPLY_MODEL_PY}
 payload = json.loads(${JSON.stringify(payloadJson)})
 config = repair_surrogates(load_config() or {})
 current_model = config.get("model")
@@ -743,30 +754,34 @@ base_url = str(payload.get("baseUrl") or "").strip()
 api_key_present = "apiKey" in payload or "api_key" in payload
 api_key = str(payload.get("apiKey") or payload.get("api_key") or "").strip()
 
-if default_model:
-    model["default"] = default_model
+if payload.get("managed") == ${JSON.stringify(HEADMASTER_MANAGED_MARKER)}:
+    if apply_headmaster_model(config, payload):
+        model = dict(config["model"])
 else:
-    model.pop("default", None)
-
-if provider:
-    model["provider"] = provider
-else:
-    model.pop("provider", None)
-
-if base_url:
-    model["base_url"] = base_url
-else:
-    model.pop("base_url", None)
-
-if api_key_present:
-    if api_key:
-        model["api_key"] = api_key
+    if default_model:
+        model["default"] = default_model
     else:
+        model.pop("default", None)
+
+    if provider:
+        model["provider"] = provider
+    else:
+        model.pop("provider", None)
+
+    if base_url:
+        model["base_url"] = base_url
+    else:
+        model.pop("base_url", None)
+
+    if api_key_present:
+        if api_key:
+            model["api_key"] = api_key
+        else:
+            model.pop("api_key", None)
+    elif provider and provider != "custom":
         model.pop("api_key", None)
-elif provider and provider != "custom":
-    model.pop("api_key", None)
-elif not provider:
-    model.pop("api_key", None)
+    elif not provider:
+        model.pop("api_key", None)
 
 if model:
     config["model"] = model

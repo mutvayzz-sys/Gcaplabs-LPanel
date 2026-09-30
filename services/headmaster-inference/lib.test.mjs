@@ -12,7 +12,11 @@ import {
 } from "./assertion.mjs";
 import { createInferenceService } from "./lib.mjs";
 import { createMemoryQuotaStore, createRedisQuotaStore } from "./quota.mjs";
-import { parseAccountProviderMap, providerCompletionUrl } from "./policy.mjs";
+import {
+  HEADMASTER_TIER_MODELS,
+  parseAccountProviderMap,
+  providerCompletionUrl,
+} from "./policy.mjs";
 
 const SECRET = "s".repeat(48);
 const OWNER_A = "11111111-1111-4111-8111-111111111111";
@@ -345,6 +349,58 @@ test("assertion replay, request-selected provider and unlisted models fail close
   const unsupportedResponse = await postCompletion(f.origin, unsupported, unsupportedToken);
   assert.equal(unsupportedResponse.status, 400);
   assert.equal((await unsupportedResponse.json()).error.code, "model_not_allowed");
+  assert.deepEqual(fetchCalls, []);
+});
+
+test("a Headmaster tier id resolves to the account's assigned model before the provider call", async (t) => {
+  const upstreamCalls = [];
+  const f = await startService(t, {
+    fetchImpl: async (url, options) => {
+      upstreamCalls.push({ url: String(url), parsed: JSON.parse(options.body) });
+      return new Response(
+        JSON.stringify({
+          id: "c1",
+          model: "gpt-5.5",
+          choices: [{ message: { role: "assistant", content: "hi" } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+  for (const tier of ["headmaster-lite", "headmaster-pro", "headmaster-max"]) {
+    const body = Buffer.from(
+      JSON.stringify({ model: tier, messages: [{ role: "user", content: "x" }] }),
+    );
+    const token = makeToken({ method: "POST", path: "/v1/chat/completions", body });
+    const response = await postCompletion(f.origin, body, token);
+    assert.equal(response.status, 200, tier);
+  }
+  assert.deepEqual(
+    upstreamCalls.map((call) => call.parsed.model),
+    ["gpt-5.5", "gpt-5.5", "gpt-5.5"],
+  );
+  assert.deepEqual(HEADMASTER_TIER_MODELS, ["headmaster-lite", "headmaster-pro", "headmaster-max"]);
+});
+
+test("a tier id never widens the model allowlist", async (t) => {
+  const fetchCalls = [];
+  const f = await startService(t, {
+    // No model is enabled for this account, so a tier has nothing to resolve to.
+    accountProviderMap: new Map([
+      [OWNER_A, { noraUserId: NORA_USER_A, providerId: PROVIDER_A, provider: "openai", models: [] }],
+    ]),
+    fetchImpl: async () => {
+      fetchCalls.push(1);
+      return new Response("{}");
+    },
+  });
+  const body = Buffer.from(
+    JSON.stringify({ model: "headmaster-max", messages: [{ role: "user", content: "x" }] }),
+  );
+  const token = makeToken({ method: "POST", path: "/v1/chat/completions", body });
+  const response = await postCompletion(f.origin, body, token);
+  assert.notEqual(response.status, 200);
   assert.deepEqual(fetchCalls, []);
 });
 

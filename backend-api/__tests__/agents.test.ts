@@ -43,6 +43,7 @@ const mockPersistHermesMemoryProviderConfig = jest.fn().mockResolvedValue({
   provider: "hindsight",
   configPath: "/opt/hermes/config.yaml",
 });
+const mockPersistHermesModelConfig = jest.fn().mockResolvedValue({ ok: true });
 const mockReadHermesRuntimeSnapshot = jest.fn().mockResolvedValue({
   runtimeStatus: {
     gateway_state: "running",
@@ -343,6 +344,7 @@ jest.mock("../hermesUi", () => ({
   testHermesChannel: mockTestHermesChannel,
   readHermesRuntimeSnapshot: mockReadHermesRuntimeSnapshot,
   persistHermesMemoryProviderConfig: mockPersistHermesMemoryProviderConfig,
+  persistHermesModelConfig: mockPersistHermesModelConfig,
 }));
 jest.mock("../agentMigrations", () => ({
   attachDraftToAgent: mockAttachDraftToAgent,
@@ -5444,6 +5446,86 @@ describe("POST /agents/:id/integrations/headmaster/adopt", () => {
       adopted: true,
       memory: { ok: false, error: "runtime unreachable" },
     });
+  });
+});
+
+describe("POST /agents/:id/integrations/headmaster/adopt model stamp", () => {
+  const EXTERNAL_ID = "47a0b178-0497-4b83-91f9-92af078310d0";
+  const OWNER_UUID = "f125bb2c-1ce1-4b01-9da5-9b736caf503f";
+
+  function adoptRows(id, runtimeFamily) {
+    return [
+      { rows: [{ id, name: "Hermes-Agent", user_id: "user-1", external_namespace: null }] },
+      {
+        rows: [
+          {
+            id,
+            name: "Hermes-Agent",
+            user_id: "user-1",
+            runtime_family: runtimeFamily,
+            external_namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            external_owner_uuid: OWNER_UUID,
+          },
+        ],
+      },
+    ];
+  }
+
+  function adopt(id) {
+    return auth(
+      request(app)
+        .post(`/agents/${id}/integrations/headmaster/adopt`)
+        .send({
+          external_identity: {
+            namespace: "headmaster",
+            external_id: EXTERNAL_ID,
+            owner_uuid: OWNER_UUID,
+          },
+        }),
+    );
+  }
+
+  it("stamps the relay model block on an adopted Hermes runtime", async () => {
+    mockPersistHermesModelConfig.mockClear();
+    const [first, second] = adoptRows("a-model-1", "hermes");
+    mockDb.query.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+
+    const res = await adopt("a-model-1");
+
+    expect(res.status).toBe(200);
+    expect(mockPersistHermesModelConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "a-model-1" }),
+      expect.objectContaining({ managed: "headmaster", provider: "headmaster" }),
+    );
+    expect(res.body.inference).toEqual({ ok: true });
+  });
+
+  it("does not fail identity binding when the runtime cannot be reached for the stamp", async () => {
+    mockPersistHermesModelConfig.mockClear();
+    mockPersistHermesModelConfig.mockRejectedValueOnce(new Error("runtime unreachable"));
+    const [first, second] = adoptRows("a-model-2", "hermes");
+    mockDb.query.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+
+    const res = await adopt("a-model-2");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      adopted: true,
+      inference: { ok: false, error: "runtime unreachable" },
+    });
+  });
+
+  it("leaves a non-Hermes runtime alone", async () => {
+    mockPersistHermesModelConfig.mockClear();
+    const [first, second] = adoptRows("a-model-3", "openclaw");
+    mockDb.query.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+
+    const res = await adopt("a-model-3");
+
+    expect(res.status).toBe(200);
+    expect(mockPersistHermesModelConfig).not.toHaveBeenCalled();
+    expect(res.body).not.toHaveProperty("inference");
   });
 });
 

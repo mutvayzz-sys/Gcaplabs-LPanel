@@ -36,10 +36,36 @@ retry uses the existing safe offline-stage/start/readiness lifecycle. An agent
 stopped by its user is not automatically started. `pending` is retryable after an
 interrupted API process, so it cannot strand the bridge in an in-progress state.
 
+## Model provider: the Headmaster relay, never operator keys
+
+A Headmaster-managed Hermes agent (external namespace `headmaster`) gets one
+built-in model provider named `headmaster`, with three fixed tiers: Lite, Pro and
+Max (`headmaster-lite`, `headmaster-pro`, `headmaster-max`; default Lite). It
+registers as a `providers.headmaster` entry with `discover_models: false`, so a
+fresh Cloud model picker shows exactly those three rows.
+
+- Nora never copies operator provider keys, provider base-url overrides or a
+  persisted `NORA_HERMES_MODEL_CONFIG_B64` into these containers. Both
+  pipelines (`authSync.ts` and the provisioner `worker.ts`) build the model
+  block from `agent-runtime/lib/headmasterInference.ts` for managed agents and
+  ignore operator and persisted config.
+- The container gets `HEADMASTER_INFERENCE_KEY`, an HMAC-SHA256 of its own
+  `API_SERVER_KEY` (label `headmaster-inference-v1`), and
+  `HEADMASTER_INFERENCE_BASE_URL` (default `https://inference.gcaplabs.com/v1`,
+  https only). `config.yaml` refers to the key as `${HEADMASTER_INFERENCE_KEY}`.
+- Admission recognizes that key on the account inference host, resolves it to the
+  owner with `POST /api/integrations/headmaster/runtime-identity` and
+  `runtime_key_kind: "inference"`, checks entitlement, and signs the relay
+  assertion. The relay maps a tier id to the account's assigned model and holds
+  the only operator key.
+- The adopt route stamps the managed model block onto a Hermes runtime. A model
+  the user picks from another provider persists until the next resync; keeping it
+  across resyncs belongs to the own-keys step.
+
 ## Validation and deployment
 
 Run the backend typecheck and the `headmasterConfig`, `authSync`, `agents`,
-`llmProviders` and `openapi` Jest suites on Linux Node 24. The auth-sync suite
+`hermesUi`, `headmasterRuntimeIdentity`, `llmProviders` and `openapi` Jest suites on Linux Node 24. The auth-sync suite
 executes `/bin/sh` and therefore needs Linux.
 
 `backend-api/scripts/headmaster-managed-config-live.ts` is a fixture-only harness.

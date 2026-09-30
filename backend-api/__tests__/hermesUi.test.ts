@@ -252,6 +252,67 @@ describe("Hermes helper execution", () => {
   });
 });
 
+describe("Headmaster managed model block", () => {
+  const { createHermesConfigSandbox } = require("./support/hermesConfigStub");
+  const { buildHeadmasterModelConfig } = require("../../agent-runtime/lib/headmasterInference");
+
+  async function applyThroughPersist(existing) {
+    const sandbox = createHermesConfigSandbox(existing);
+    try {
+      mockRunContainerCommand.mockResolvedValueOnce({ output: JSON.stringify({ ok: true }) });
+      await persistHermesModelConfig(
+        { id: "agent-hermes-1", container_id: "hermes-container-1" },
+        buildHeadmasterModelConfig({}),
+      );
+      const [, command] = mockRunContainerCommand.mock.calls.at(-1);
+      sandbox.runPython(decodeHermesHelperScript(command));
+      return sandbox.readConfig();
+    } finally {
+      sandbox.cleanup();
+    }
+  }
+
+  it("registers the provider with its fixed tiers and points the model at it", async () => {
+    const config = await applyThroughPersist(null);
+    expect(config.model).toMatchObject({
+      provider: "headmaster",
+      default: "headmaster-lite",
+      api_key: "${HEADMASTER_INFERENCE_KEY}",
+    });
+    expect(Object.keys(config.providers.headmaster.models)).toEqual([
+      "headmaster-lite",
+      "headmaster-pro",
+      "headmaster-max",
+    ]);
+    expect(config.providers.headmaster.discover_models).toBe(false);
+  });
+
+  it("drops an operator provider and key, and keeps a tier the user picked", async () => {
+    const replaced = await applyThroughPersist({
+      model: { provider: "openrouter", default: "x/y", api_key: "sk-operator-secret" },
+    });
+    expect(JSON.stringify(replaced)).not.toContain("sk-operator-secret");
+    expect(replaced.model.provider).toBe("headmaster");
+    const kept = await applyThroughPersist({
+      model: { provider: "headmaster", default: "headmaster-pro" },
+    });
+    expect(kept.model.default).toBe("headmaster-pro");
+  });
+
+  it("replays a stored headmaster model block as the full managed block", async () => {
+    mockDb.query.mockReset().mockResolvedValue({
+      rows: [
+        {
+          model_config: { provider: "headmaster", defaultModel: "headmaster-lite", baseUrl: "x" },
+          channel_configs: {},
+        },
+      ],
+    });
+    const state = await getPersistedHermesState("agent-hermes-1");
+    expect(state.modelConfig).toEqual(buildHeadmasterModelConfig());
+  });
+});
+
 describe("Hermes persisted runtime state", () => {
   beforeEach(() => {
     mockDb.query.mockReset();
