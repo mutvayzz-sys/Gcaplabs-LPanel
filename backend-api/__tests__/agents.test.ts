@@ -153,6 +153,8 @@ jest.mock("../containerManager", () => ({
   start: jest.fn().mockResolvedValue({}),
   stop: jest.fn().mockResolvedValue({}),
   restart: jest.fn().mockResolvedValue({}),
+  setMemory: jest.fn().mockResolvedValue({}),
+  setBotScreenGate: jest.fn().mockResolvedValue({}),
   destroy: jest.fn().mockResolvedValue({}),
   persistLifecycleRuntimeAddress: mockPersistLifecycleRuntimeAddress,
   isIgnorableStopError: jest.fn((error) =>
@@ -8262,5 +8264,86 @@ describe("agent deletion routes", () => {
     const res = await auth(request(app).post("/agents/missing/delete"));
     expect(res.status).toBe(404);
     expect(mockAcquireAgentProvisionLock).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /agents/:id/memory bot_screen", () => {
+  const row = (extra = {}) => ({
+    id: "a-mem",
+    name: "Mem",
+    status: "running",
+    user_id: "user-1",
+    container_id: "cid",
+    ram_mb: 2048,
+    ...extra,
+  });
+  function queueRows(extra = {}) {
+    mockDb.query
+      .mockResolvedValueOnce({ rows: [row(extra)] })
+      .mockResolvedValueOnce({ rows: [row(extra)] })
+      .mockResolvedValueOnce({ rows: [row({ ...extra, ram_mb: 3072 })] });
+  }
+
+  it.each(["true", 1, null, "on"])("rejects non-boolean bot_screen %p", async (v) => {
+    const cm = require("../containerManager");
+    cm.setMemory.mockClear();
+    cm.setBotScreenGate.mockClear();
+    const res = await auth(
+      request(app).post("/agents/a-mem/memory").send({ ram_mb: 3072, bot_screen: v }),
+    );
+    expect(res.status).toBe(400);
+    expect(cm.setMemory).not.toHaveBeenCalled();
+    expect(cm.setBotScreenGate).not.toHaveBeenCalled();
+  });
+
+  it("creates the gate after the memory update when bot_screen is true", async () => {
+    const cm = require("../containerManager");
+    cm.setMemory.mockClear();
+    cm.setBotScreenGate.mockClear();
+    queueRows();
+    const res = await auth(
+      request(app).post("/agents/a-mem/memory").send({ ram_mb: 3072, bot_screen: true }),
+    );
+    expect(res.status).toBe(200);
+    expect(cm.setMemory).toHaveBeenCalledTimes(1);
+    expect(cm.setBotScreenGate).toHaveBeenCalledWith(expect.objectContaining({ id: "a-mem" }), true);
+    expect(cm.setMemory.mock.invocationCallOrder[0]).toBeLessThan(
+      cm.setBotScreenGate.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("removes the gate when bot_screen is false", async () => {
+    const cm = require("../containerManager");
+    cm.setBotScreenGate.mockClear();
+    queueRows({ ram_mb: 3072 });
+    const res = await auth(
+      request(app).post("/agents/a-mem/memory").send({ ram_mb: 2048, bot_screen: false }),
+    );
+    expect(res.status).toBe(200);
+    expect(cm.setBotScreenGate).toHaveBeenCalledWith(expect.anything(), false);
+  });
+
+  it("leaves the gate alone when bot_screen is absent", async () => {
+    const cm = require("../containerManager");
+    cm.setBotScreenGate.mockClear();
+    queueRows();
+    const res = await auth(request(app).post("/agents/a-mem/memory").send({ ram_mb: 3072 }));
+    expect(res.status).toBe(200);
+    expect(cm.setBotScreenGate).not.toHaveBeenCalled();
+  });
+
+  it("refuses bot_screen on a stopped agent before touching the container", async () => {
+    const cm = require("../containerManager");
+    cm.setMemory.mockClear();
+    cm.setBotScreenGate.mockClear();
+    mockDb.query
+      .mockResolvedValueOnce({ rows: [row({ status: "stopped" })] })
+      .mockResolvedValueOnce({ rows: [row({ status: "stopped" })] });
+    const res = await auth(
+      request(app).post("/agents/a-mem/memory").send({ ram_mb: 3072, bot_screen: true }),
+    );
+    expect(res.status).toBe(409);
+    expect(cm.setMemory).not.toHaveBeenCalled();
+    expect(cm.setBotScreenGate).not.toHaveBeenCalled();
   });
 });

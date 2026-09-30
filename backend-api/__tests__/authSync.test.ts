@@ -54,6 +54,7 @@ jest.mock("../llmProviders", () => ({
     runtimeFamily === "hermes"
       ? [
           "OPENAI_API_KEY",
+          "OPENAI_BASE_URL",
           "GEMINI_API_KEY",
           "NORA_HERMES_MANAGED_ENV_B64",
           "NORA_HERMES_MODEL_CONFIG_B64",
@@ -213,6 +214,7 @@ describe("auth sync", () => {
     });
     mockGetIntegrationEnvVars.mockResolvedValue({
       GITHUB_TOKEN: "fixture",
+      OPENAI_API_KEY: "integration-provider-key",
       HEADMASTER_OWNER_ID: "spoof",
     });
     const expected = {

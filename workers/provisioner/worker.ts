@@ -1726,9 +1726,13 @@ async function fetchEffectiveProviderState(
         : Promise.resolve({ enabledIds: [], entries: [], env: {}, managedEnvNames: [] }),
       agentId ? getIntegrationsForSync(agentId) : Promise.resolve([]),
     ]);
-  const integrationLlmEnvVars = Object.fromEntries(
-    Object.entries(integrationEnvVars || {}).filter(([name]) => PROVIDER_ENV_NAMES.has(name)),
-  );
+  // A managed runtime never carries a provider key, even one an operator
+  // attached through an integration.
+  const integrationLlmEnvVars = headmasterManaged
+    ? {}
+    : Object.fromEntries(
+        Object.entries(integrationEnvVars || {}).filter(([name]) => PROVIDER_ENV_NAMES.has(name)),
+      );
   // Explicit llm_provider rows remain authoritative when an integration emits
   // the same env name. Integration-backed LLM auth still participates in the
   // fingerprint so connect/remove cannot race deployment finalization.
@@ -4590,6 +4594,15 @@ const worker = new Worker(
       let agentSecretEnvVars = {};
       try {
         agentSecretEnvVars = normalizeEnvValueMap(await getAgentSecretEnvVars(id));
+        if (
+          resolvedRuntimeFields.runtime_family === "hermes" &&
+          require("../../backend-api/headmasterConfig").isHeadmasterManagedAgent(agentRow)
+        ) {
+          // Imported overrides must not put a provider key into a managed runtime.
+          agentSecretEnvVars = Object.fromEntries(
+            Object.entries(agentSecretEnvVars).filter(([name]) => !PROVIDER_ENV_NAMES.has(name)),
+          );
+        }
         if (Object.keys(agentSecretEnvVars).length > 0) {
           console.log(
             `[provisioner] Injecting ${Object.keys(agentSecretEnvVars).length} imported env override(s) for agent ${id}`,
