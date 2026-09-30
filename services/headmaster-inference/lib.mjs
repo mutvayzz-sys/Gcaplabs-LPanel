@@ -2,10 +2,15 @@ import http from "node:http";
 import { createReplayCache, verifyAssertion } from "./assertion.mjs";
 import {
   TESTED_MODELS,
+  BYO_MODELS_CAP,
+  BYO_MODEL_ID,
   allowedModelsForProvider,
+  isByoProvider,
   normalizeUsage,
+  prepareByoChatCompletion,
   prepareChatCompletion,
   providerCompletionUrl,
+  providerModelsUrl,
   safeProviderError,
 } from "./policy.mjs";
 
@@ -197,6 +202,10 @@ export function createInferenceService({
   defaultCompletionTokens = 1024,
   requestTimeoutMs = 120_000,
   replayStore = null,
+  // Personal provider keys (optional). Without both, byo requests fail 503
+  // own_key_unavailable and the operator path is unaffected.
+  resolveOwnKey = null,
+  byoQuotaStore = null,
 } = {}) {
   if (typeof assertionSecret !== "string" || Buffer.byteLength(assertionSecret) < 32)
     throw new Error("assertion_secret_invalid");
@@ -286,6 +295,9 @@ export function createInferenceService({
         "Private inference assertion was already used.",
         claims.request_id,
       );
+    // A verified byo_provider claim selects the personal-key path. It never
+    // reads assignments, operator provider rows, or operator quota counters.
+    if (claims.byo_provider !== undefined) return handleByo(req, res, body, claims);
     let mapping;
     try {
       mapping = await lookupAssignment(claims.sub.toLowerCase());
@@ -595,6 +607,267 @@ export function createInferenceService({
         .catch((error) =>
           logger.error?.("headmaster-inference usage accounting failed", {
             requestId: claims.request_id,
+            code: error?.code || "quota_store_unavailable",
+          }),
+        );
+    }
+  }
+
+  function byoModelList(ids, provider, requestId) {
+    return {
+      object: "list",
+      data: ids.map((id) => ({ id, object: "model", owned_by: provider })),
+      request_id: requestId,
+    };
+  }
+
+  function byoModelIds(buffer) {
+    let parsed;
+    try {
+      parsed = JSON.parse(buffer.toString("utf8"));
+    } catch {
+      return null;
+    }
+    const entries = Array.isArray(parsed?.data) ? parsed.data : null;
+    if (!entries) return null;
+    const ids = [];
+    const seen = new Set();
+    for (const entry of entries) {
+      const id = typeof entry === "string" ? entry : entry?.id;
+      if (typeof id !== "string" || !BYO_MODEL_ID.test(id) || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+      if (ids.length >= BYO_MODELS_CAP) break;
+    }
+    return ids;
+  }
+
+  function byoFailure(res, upstreamStatus, requestId, retryAfter) {
+    // Provider error bodies are never relayed (they can echo request detail).
+    if (upstreamStatus === 401 || upstreamStatus === 403)
+      return safeError(
+        res,
+        400,
+        "own_key_rejected",
+        "The model provider rejected your API key.",
+        requestId,
+      );
+    const failure = safeProviderError(upstreamStatus);
+    const retryHeaders =
+      retryAfter && /^\d{1,6}$/.test(retryAfter) ? { "retry-after": retryAfter } : {};
+    return safeError(res, failure.status, failure.code, failure.message, requestId, retryHeaders);
+  }
+
+  async function handleByo(req, res, body, claims) {
+    const requestId = claims.request_id;
+    const provider = claims.byo_provider;
+    if (!isByoProvider(provider))
+      return safeError(res, 400, "byo_provider_invalid", "Provider is not supported.", requestId);
+    if (typeof resolveOwnKey !== "function" || !byoQuotaStore)
+      return safeError(
+        res,
+        503,
+        "own_key_unavailable",
+        "Your API key is temporarily unavailable.",
+        requestId,
+      );
+    const isModels = req.method === "GET";
+    let parsed = null;
+    let prepared = null;
+    let target;
+    try {
+      target = isModels ? providerModelsUrl(provider) : providerCompletionUrl({ provider });
+    } catch {
+      return safeError(
+        res,
+        503,
+        "provider_endpoint_unavailable",
+        "The provider endpoint is not supported.",
+        requestId,
+      );
+    }
+    if (!isModels) {
+      try {
+        parsed = JSON.parse(body.toString("utf8"));
+      } catch {
+        return safeError(res, 400, "body_invalid", "Request body must be valid JSON.", requestId);
+      }
+      prepared = prepareByoChatCompletion(parsed, provider, {
+        maxCompletionTokens,
+        defaultCompletionTokens,
+      });
+      if (prepared.error)
+        return safeError(
+          res,
+          400,
+          prepared.error,
+          "The request is not supported by the inference contract.",
+          requestId,
+        );
+    }
+    const reservation = await byoQuotaStore
+      .acquire({ ownerId: claims.sub, requestId, reserveOutputTokens: 0 })
+      .catch((error) => {
+        logger.error?.("headmaster-inference own key quota lookup failed", {
+          requestId,
+          code: error?.code || "quota_store_unavailable",
+        });
+        return null;
+      });
+    if (!reservation)
+      return safeError(
+        res,
+        503,
+        "quota_unavailable",
+        "Managed inference is temporarily unavailable.",
+        requestId,
+      );
+    if (!reservation.allowed)
+      return safeError(
+        res,
+        429,
+        reservation.reason === "concurrency"
+          ? "too_many_concurrent_requests"
+          : "request_budget_exceeded",
+        "This account has reached its request limit.",
+        requestId,
+      );
+
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () =>
+        controller.abort(
+          Object.assign(new Error("provider_timeout"), { code: "provider_timeout" }),
+        ),
+      requestTimeoutMs,
+    );
+    timeout.unref?.();
+    const onAborted = () => controller.abort(new Error("client_cancelled"));
+    const onClose = () => {
+      if (!res.writableFinished) controller.abort(new Error("client_cancelled"));
+    };
+    req.once("aborted", onAborted);
+    req.socket?.once("close", onClose);
+    res.once("close", onClose);
+    try {
+      let apiKey;
+      try {
+        apiKey = await resolveOwnKey(claims.sub.toLowerCase(), provider);
+      } catch (error) {
+        logger.warn?.("headmaster-inference own key unavailable", {
+          requestId,
+          provider,
+          code: error?.code || "own_key_unavailable",
+        });
+        return safeError(
+          res,
+          503,
+          "own_key_unavailable",
+          "Your API key is temporarily unavailable.",
+          requestId,
+        );
+      }
+      if (typeof apiKey !== "string" || !apiKey)
+        return safeError(
+          res,
+          404,
+          "provider_key_missing",
+          "No API key is stored for this provider.",
+          requestId,
+        );
+      const streaming = !isModels && prepared.body.stream === true;
+      const upstream = await fetchImpl(target, {
+        method: isModels ? "GET" : "POST",
+        redirect: "error",
+        signal: controller.signal,
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          accept: streaming ? "text/event-stream" : "application/json",
+          "x-request-id": requestId,
+          ...(isModels ? {} : { "content-type": "application/json" }),
+        },
+        ...(isModels ? {} : { body: JSON.stringify(prepared.body) }),
+      });
+      if (!upstream.ok) {
+        await upstream.body?.cancel().catch(() => {});
+        return byoFailure(res, upstream.status, requestId, upstream.headers.get("retry-after"));
+      }
+      if (isModels) {
+        const ids = byoModelIds(await readProviderResponse(upstream, maxResponseBytes));
+        if (!ids)
+          return safeError(
+            res,
+            502,
+            "provider_error",
+            "The model provider returned an unexpected response.",
+            requestId,
+          );
+        return sendJson(res, 200, byoModelList(ids, provider, requestId), requestId);
+      }
+      if (streaming) {
+        await copyStreamingResponse(upstream, res, controller.signal, requestId, maxResponseBytes);
+      } else {
+        const responseBody = await readProviderResponse(upstream, maxResponseBytes);
+        res.writeHead(upstream.status, {
+          "content-type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
+          "cache-control": "no-store",
+          "x-request-id": requestId,
+        });
+        res.end(responseBody);
+      }
+      logger.info?.("headmaster-inference own key completed", {
+        requestId,
+        provider,
+        model: parsed?.model,
+      });
+    } catch (error) {
+      const disconnected =
+        controller.signal.aborted && controller.signal.reason?.message === "client_cancelled";
+      if (disconnected) {
+        logger.info?.("headmaster-inference own key cancelled", { requestId, provider });
+      } else if (res.headersSent) {
+        res.destroy();
+      } else if (controller.signal.aborted || error?.code === "provider_timeout") {
+        safeError(res, 504, "provider_timeout", "The model provider timed out.", requestId);
+      } else if (error?.code === "provider_response_too_large") {
+        safeError(
+          res,
+          502,
+          "provider_response_too_large",
+          "The model provider returned an oversized response.",
+          requestId,
+        );
+      } else {
+        logger.warn?.("headmaster-inference own key provider request failed", {
+          requestId,
+          provider,
+          code: error?.code || "provider_unavailable",
+        });
+        safeError(
+          res,
+          503,
+          "provider_unavailable",
+          "The model provider is temporarily unavailable.",
+          requestId,
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+      req.removeListener("aborted", onAborted);
+      req.socket?.removeListener("close", onClose);
+      res.removeListener("close", onClose);
+      await byoQuotaStore
+        .finish({
+          ownerId: claims.sub,
+          requestId,
+          quotaDay: reservation.day,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+        })
+        .catch((error) =>
+          logger.error?.("headmaster-inference own key accounting failed", {
+            requestId,
             code: error?.code || "quota_store_unavailable",
           }),
         );

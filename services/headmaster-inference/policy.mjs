@@ -189,6 +189,14 @@ export function prepareChatCompletion(body, mapping, providerMetadataModels, lim
   const resolvedModel = resolveTierModel(body.model, allowedModels);
   if (!allowedModels.includes(resolvedModel)) return { error: "model_not_allowed" };
 
+  const limited = limitCompletionTokens(body, mapping.provider, limits, resolvedModel);
+  if (limited.error) return limited;
+  return { body: limited.body, reserveOutputTokens: limited.reserveOutputTokens, allowedModels };
+}
+
+// Shared by the operator and personal-key paths: validates any client-supplied
+// completion token cap and otherwise injects the default for the protocol.
+function limitCompletionTokens(body, providerName, limits = {}, model = body.model) {
   const maxCompletionTokens =
     Number.isSafeInteger(limits.maxCompletionTokens) && limits.maxCompletionTokens > 0
       ? limits.maxCompletionTokens
@@ -197,7 +205,7 @@ export function prepareChatCompletion(body, mapping, providerMetadataModels, lim
     Number.isSafeInteger(limits.defaultCompletionTokens) && limits.defaultCompletionTokens > 0
       ? Math.min(limits.defaultCompletionTokens, maxCompletionTokens)
       : Math.min(1024, maxCompletionTokens);
-  const request = { ...body, model: resolvedModel };
+  const request = { ...body, model };
   const supplied = ["max_completion_tokens", "max_tokens"]
     .filter((field) => body[field] !== undefined)
     .map((field) => body[field]);
@@ -211,11 +219,44 @@ export function prepareChatCompletion(body, mapping, providerMetadataModels, lim
   if (supplied.length === 0) {
     // OpenAI's current models require max_completion_tokens; the other
     // OpenAI-compatible catalogs (including OpenRouter) accept max_tokens.
-    request[mapping.provider === "openai" ? "max_completion_tokens" : "max_tokens"] =
+    request[providerName === "openai" ? "max_completion_tokens" : "max_tokens"] =
       defaultCompletionTokens;
   }
   const reserveOutputTokens = supplied.length ? Math.min(...supplied) : defaultCompletionTokens;
-  return { body: request, reserveOutputTokens, allowedModels };
+  return { body: request, reserveOutputTokens };
+}
+
+// Personal ("bring your own") provider keys: only providers with a fixed relay
+// endpoint above are eligible, and the model id is not limited to the tested
+// catalogue because the user's own key is used against the user's own account.
+export const BYO_MODEL_ID = /^[A-Za-z0-9._:/@+-]{1,128}$/;
+export const BYO_MODELS_CAP = 500;
+
+export function isByoProvider(value) {
+  return typeof value === "string" && Object.hasOwn(PROVIDER_ENDPOINTS, value);
+}
+
+export function prepareByoChatCompletion(body, providerName, limits = {}) {
+  if (!isByoProvider(providerName)) return { error: "byo_provider_invalid" };
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "body_invalid" };
+  if (Object.keys(body).some((key) => CLIENT_AUTHORITY_FIELDS.has(key.toLowerCase()))) {
+    return { error: "client_authority_field_forbidden" };
+  }
+  if (!Array.isArray(body.messages) || body.messages.length === 0)
+    return { error: "messages_required" };
+  if (body.stream !== undefined && typeof body.stream !== "boolean")
+    return { error: "stream_invalid" };
+  if (typeof body.model !== "string" || !body.model) return { error: "model_required" };
+  if (!BYO_MODEL_ID.test(body.model)) return { error: "model_not_allowed" };
+  return limitCompletionTokens(body, providerName, limits);
+}
+
+// Fixed models endpoint for a personal-key provider, built from the same
+// allowlisted base as the completion URL (never a client-supplied URL).
+export function providerModelsUrl(providerName) {
+  const url = providerCompletionUrl({ provider: providerName });
+  url.pathname = url.pathname.replace(/\/chat\/completions$/, "/models");
+  return url;
 }
 
 export function providerCompletionUrl(provider) {

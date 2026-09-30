@@ -260,3 +260,41 @@ export function createMemoryQuotaStore({
     },
   };
 }
+
+// Personal-provider-key ("byo") traffic uses its own counters so it can never
+// consume, or be blocked by, the operator-funded token/request budgets. These
+// stores reuse the operator implementation under a distinct key prefix, apply
+// only concurrency and an hourly request cap, and reserve/charge no tokens
+// (the user pays their own provider). Callers acquire with reserveOutputTokens 0.
+const BYO_UNLIMITED_TOKENS = Number.MAX_SAFE_INTEGER;
+
+export function createRedisByoQuotaStore(
+  redis,
+  {
+    prefix = "headmaster-inference-byo",
+    maxConcurrentPerAccount = 3,
+    maxRequestsPerHour = 600,
+    ...rest
+  } = {},
+) {
+  return createRedisQuotaStore(redis, {
+    ...rest,
+    prefix,
+    maxConcurrentPerAccount,
+    maxRequestsPerHour,
+    maxCompletionTokensPerDay: BYO_UNLIMITED_TOKENS,
+  });
+}
+
+export function createMemoryByoQuotaStore({
+  maxConcurrentPerAccount = 3,
+  maxRequestsPerHour = 600,
+  ...rest
+} = {}) {
+  return createMemoryQuotaStore({
+    ...rest,
+    maxConcurrentPerAccount,
+    maxRequestsPerHour,
+    maxCompletionTokensPerDay: BYO_UNLIMITED_TOKENS,
+  });
+}

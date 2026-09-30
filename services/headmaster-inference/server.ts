@@ -16,7 +16,8 @@ const { createRedisClient } = require("../../backend-api/lib/connectionConfig.ts
 const IORedis = require("ioredis");
 const { resolveAssignmentConfiguration } = require("./assignments.mjs");
 const { createRedisReplayStore } = require("./assertion.mjs");
-const { createRedisQuotaStore } = require("./quota.mjs");
+const { createRedisQuotaStore, createRedisByoQuotaStore } = require("./quota.mjs");
+const { createProviderKeyResolver } = require("./byo.mjs");
 const { createInferenceService } = require("./lib.mjs");
 
 function positiveInt(value, fallback, max) {
@@ -87,7 +88,36 @@ async function main() {
       100_000_000,
     ),
   });
+  // Personal provider keys. Always constructed (never throws): with an unset or
+  // short HEADMASTER_PROVIDER_KEY_SECRET, or without the Headmaster Supabase
+  // credentials, byo requests answer 503 own_key_unavailable and the operator
+  // path is unaffected. Uses the same Supabase credentials as the assignments.
+  const providerKeySecret = String(process.env.HEADMASTER_PROVIDER_KEY_SECRET || "");
+  const resolveOwnKey = createProviderKeyResolver({
+    supabaseUrl: process.env.HEADMASTER_INFERENCE_SUPABASE_URL,
+    serviceRoleKey: process.env.HEADMASTER_INFERENCE_SUPABASE_SERVICE_ROLE_KEY,
+    secret: providerKeySecret,
+    logger: console,
+  });
+  if (Buffer.byteLength(providerKeySecret) < 32)
+    console.warn(
+      "HEADMASTER_PROVIDER_KEY_SECRET is unset or shorter than 32 bytes; personal provider keys are disabled",
+    );
+  const byoQuotaStore = createRedisByoQuotaStore(redis, {
+    maxConcurrentPerAccount: positiveInt(
+      process.env.HEADMASTER_INFERENCE_BYO_MAX_CONCURRENT,
+      3,
+      100,
+    ),
+    maxRequestsPerHour: positiveInt(
+      process.env.HEADMASTER_INFERENCE_BYO_REQUESTS_PER_HOUR,
+      600,
+      100_000,
+    ),
+  });
   const service = createInferenceService({
+    resolveOwnKey,
+    byoQuotaStore,
     assertionSecret: requiredSecret(),
     ...assignmentLookup,
     resolveProvider: (noraUserId, providerId) =>

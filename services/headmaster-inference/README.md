@@ -129,6 +129,44 @@ The relay validates all claims and consumes each nonce once. Admission strips
 caller-supplied identity/assertion headers and signs only after authenticating
 the bearer token and checking current account entitlement.
 
+## Personal provider keys (byo)
+
+A user can store their own key for one of the relay's fixed-endpoint providers
+(openai, groq, mistral, deepseek, xai, moonshot, zai, nvidia, openrouter).
+Admission stores it AES-256-GCM encrypted in
+`public.headmaster_user_provider_keys` and forwards use through this relay with
+the same signed assertion plus an extra claim `byo_provider: <provider>`.
+
+- `HEADMASTER_PROVIDER_KEY_SECRET`: at least 32 bytes, the same value admission
+  encrypts with (`provider-key-crypto.mjs` is a byte-identical copy). If unset
+  or too short the relay still boots and the operator path is unaffected, but
+  every byo request answers `503 own_key_unavailable`. It uses the same
+  `HEADMASTER_INFERENCE_SUPABASE_URL` / `_SERVICE_ROLE_KEY` as assignments (the
+  key table grants `service_role` only).
+- A verified `byo_provider` claim skips the assignment lookup and operator
+  provider row entirely. An unknown provider is `400 byo_provider_invalid`; a
+  missing key row is `404 provider_key_missing`; lookup or decrypt problems are
+  `503 own_key_unavailable`. A byo request never falls back to an operator key.
+- The ciphertext row is read with a bounded, deadline-limited single-row
+  select and cached for at most 30 s (misses and failures are never cached), so
+  a deleted or replaced key stops working within 30 s.
+- `GET /v1/models` fetches the provider's `/models` with the user's key and
+  returns at most 500 OpenAI-format ids. `POST /v1/chat/completions` goes to the
+  provider's fixed allowlisted endpoint (never a client URL) with any model id
+  matching `^[A-Za-z0-9._:/@+-]{1,128}$` (the tested-model catalogue does not
+  apply); token caps, body size, response size, streaming and timeouts are the
+  operator path's.
+- Provider 401/403 becomes `400 own_key_rejected`; other provider errors use the
+  same sanitized mapping as the operator path. Provider error bodies are never
+  relayed.
+- Limits are separate from the operator budgets (distinct Redis prefix
+  `headmaster-inference-byo`, no token accounting):
+  `HEADMASTER_INFERENCE_BYO_MAX_CONCURRENT` (default 3) and
+  `HEADMASTER_INFERENCE_BYO_REQUESTS_PER_HOUR` (default 600).
+- Never logged: the key, the ciphertext, the service credential, request or
+  response bodies. Logs carry request id, provider, model id and error codes
+  only.
+
 ## Model names
 
 Clients may name a Headmaster tier (`headmaster-lite`, `headmaster-pro`,
