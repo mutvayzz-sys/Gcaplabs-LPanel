@@ -189,14 +189,14 @@ export function prepareChatCompletion(body, mapping, providerMetadataModels, lim
   const resolvedModel = resolveTierModel(body.model, allowedModels);
   if (!allowedModels.includes(resolvedModel)) return { error: "model_not_allowed" };
 
-  const limited = limitCompletionTokens(body, mapping.provider, limits);
+  const limited = limitCompletionTokens(body, mapping.provider, limits, resolvedModel);
   if (limited.error) return limited;
   return { body: limited.body, reserveOutputTokens: limited.reserveOutputTokens, allowedModels };
 }
 
 // Shared by the operator and personal-key paths: validates any client-supplied
 // completion token cap and otherwise injects the default for the protocol.
-function limitCompletionTokens(body, providerName, limits = {}) {
+function limitCompletionTokens(body, providerName, limits = {}, model = body.model) {
   const maxCompletionTokens =
     Number.isSafeInteger(limits.maxCompletionTokens) && limits.maxCompletionTokens > 0
       ? limits.maxCompletionTokens
@@ -205,7 +205,7 @@ function limitCompletionTokens(body, providerName, limits = {}) {
     Number.isSafeInteger(limits.defaultCompletionTokens) && limits.defaultCompletionTokens > 0
       ? Math.min(limits.defaultCompletionTokens, maxCompletionTokens)
       : Math.min(1024, maxCompletionTokens);
-  const request = { ...body, model: resolvedModel };
+  const request = { ...body, model };
   const supplied = ["max_completion_tokens", "max_tokens"]
     .filter((field) => body[field] !== undefined)
     .map((field) => body[field]);
