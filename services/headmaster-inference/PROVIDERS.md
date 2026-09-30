@@ -157,6 +157,17 @@ passthrough, usage-frame accounting, and cancellation abort/reservation-release
 mechanics are now confirmed as provider evidence, not just harness
 verification.
 
+## Personal provider keys are outside the tested-model catalogue
+
+Requests that carry a verified `byo_provider` claim use the user's own key
+against the same fixed endpoints listed above, but the tested-model catalogue,
+capability table and live-test evidence in this document do not apply to them.
+The operator catalogue exists because Headmaster pays for and vouches for those
+models; a user's own key spends their own account, so any well-formed model id
+is forwarded and the provider is the authority on whether it exists. Nothing
+here claims a user-key model works end to end. See "Personal provider keys" in
+README.md.
+
 ## Relationship to the rest of M6
 
 - `lib.mjs` (durable assignment path) can carry a mapping with no `provider`
