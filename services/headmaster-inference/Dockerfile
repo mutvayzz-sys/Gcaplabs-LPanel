@@ -14,6 +14,7 @@ COPY backend-api/lib/advisoryLocks.ts backend-api/lib/advisoryLocks.ts
 COPY backend-api/lib/connectionConfig.ts backend-api/lib/connectionConfig.ts
 COPY agent-runtime/lib/nemoclawDefaults.ts agent-runtime/lib/nemoclawDefaults.ts
 COPY agent-runtime/lib/hermesRuntimeBootstrap.ts agent-runtime/lib/hermesRuntimeBootstrap.ts
+COPY agent-runtime/lib/headmasterInference.ts agent-runtime/lib/headmasterInference.ts
 COPY services/headmaster-inference/ services/headmaster-inference/
 
 ENV NODE_ENV=production \
