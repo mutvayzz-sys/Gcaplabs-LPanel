@@ -59,10 +59,27 @@ function extractExplicitAuth(req) {
   return { token: null, source: null };
 }
 
+/**
+ * Whether a verified JWT payload is a full login session. Scoped tokens that
+ * share the signing secret (gateway/embed relay tokens carry `scope` and
+ * `agentId`) are limited credentials and must never be accepted as sessions.
+ *
+ * @param {Object} payload - Verified JWT payload.
+ * @returns {boolean} True only for session-shaped payloads.
+ */
+function isSessionTokenPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  if (payload.scope !== undefined || payload.agentId !== undefined || payload.typ !== undefined) {
+    return false;
+  }
+  return typeof payload.id === "string" && Boolean(payload.id);
+}
+
 function tryDecodeSession(token) {
   if (!token) return null;
   try {
-    return jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
+    return isSessionTokenPayload(decoded) ? decoded : null;
   } catch {
     return null;
   }
@@ -237,6 +254,7 @@ function requireSession(req, res, next) {
 module.exports = {
   authenticateToken,
   extractExplicitAuth,
+  isSessionTokenPayload,
   requireAdmin,
   requireScope,
   requireSession,
