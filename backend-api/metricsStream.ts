@@ -32,6 +32,7 @@ function attachMetricsStream(server) {
       payload = jwt.verify(token, process.env.JWT_SECRET, {
         algorithms: ["HS256"],
       });
+      if (!require("./middleware/auth").isSessionTokenPayload(payload)) throw new Error("not a session token");
     } catch {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();

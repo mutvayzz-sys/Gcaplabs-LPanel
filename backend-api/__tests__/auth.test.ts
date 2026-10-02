@@ -853,6 +853,30 @@ describe("Cookie-based authentication", () => {
     });
   });
 
+  it("rejects scoped embed tokens as sessions (Bearer and cookie)", async () => {
+    const embedToken = jwt.sign({ id: "user-1", agentId: "agent-1", scope: "gateway-embed" }, JWT_SECRET, {
+      algorithm: "HS256",
+      expiresIn: "15m",
+    });
+
+    const viaBearer = await request(app).get("/auth/me").set("Authorization", `Bearer ${embedToken}`);
+    expect(viaBearer.status).toBe(401);
+    const viaCookie = await request(app).get("/auth/me").set("Cookie", `nora_auth=${embedToken}`);
+    expect(viaCookie.status).toBe(401);
+    expect(mockDb.query).not.toHaveBeenCalled();
+  });
+
+  it("isSessionTokenPayload accepts login sessions and rejects scoped tokens", () => {
+    const { isSessionTokenPayload } = require("../middleware/auth");
+    expect(isSessionTokenPayload({ id: "u1", email: "a@b.co", role: "user" })).toBe(true);
+    expect(isSessionTokenPayload({ id: "u1", email: "a@b.co", role: "user", hm: 1, jti: "j" })).toBe(true);
+    expect(isSessionTokenPayload({ id: "u1", agentId: "a1", scope: "gateway-embed" })).toBe(false);
+    expect(isSessionTokenPayload({ id: "u1", scope: "x" })).toBe(false);
+    expect(isSessionTokenPayload({ id: "u1", typ: "embed" })).toBe(false);
+    expect(isSessionTokenPayload({ email: "a@b.co" })).toBe(false);
+    expect(isSessionTokenPayload(null)).toBe(false);
+  });
+
   it("POST /auth/logout clears the auth cookie", async () => {
     const res = await request(app).post("/auth/logout");
     expect(res.status).toBe(200);
