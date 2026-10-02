@@ -1,39 +1,14 @@
-# Nora documentation source
+# Documentation source
 
-This directory is the canonical source for **docs.norafleet.ai**, hosted on Mintlify.
+This folder contains the Headmaster licence panel's product and contributor pages. Pages use Markdown or MDX. The Mintlify navigation, theme, and logo are defined in [docs.json](docs.json).
 
-Pages are written as MDX. `docs.json` defines navigation, theme, and colors. The schema reference lives at https://mintlify.com/docs.json.
+## Preview
 
-## Local preview
+With the Mintlify CLI installed, run `mint dev` from this folder to preview the documentation locally. Confirm the preview against the project's current Mintlify setup before relying on it for publication.
 
-```bash
-npm i -g mint
-cd docs
-mint dev
-# preview at http://localhost:3000
-```
+## Page maintenance
 
-## Deploying
+When a code change affects documented behavior, update the relevant page in the same change. Check command names, paths, environment-variable names, ports, and feature behavior against the implementation. Keep the navigation synchronized with the published pages.
 
-Mintlify deploys whenever changes land on the configured branch of the connected GitHub repo. Until this directory is connected to the Mintlify project (Mintlify dashboard → Settings → Git), edits here are local-only and do not yet update the published site.
-
-To connect: in the Mintlify dashboard, point the project's Git source at this repo with content path `docs/`.
-
-## Layout
-
-```
-docs/
-├── docs.json                 # navigation, theme, schema
-├── introduction.mdx          # landing page
-├── quickstart.mdx
-├── self-hosting.mdx
-├── concepts/                 # mental-model pages (agents, runtimes, workspaces, …)
-├── configuration/            # operator config (env vars, platform modes, …)
-├── guides/                   # task-oriented walkthroughs
-├── api/                      # REST API reference
-└── support/                  # FAQ, troubleshooting, contact
-```
-
-## Maintenance rule
-
-When code changes affect documented behavior, update the relevant page in this directory in the same change. Reference pages (env vars, API surface) should be reconciled against the canonical source — `.env.example` for env vars, route handlers for API shape — not freehanded.
+<!-- TODO(verify): Confirm the connected Mintlify project and publication branch before documenting a live deployment workflow. -->
+<!-- TODO(verify): Reconcile docs.json navigation and legacy page access after documentation configuration changes are in scope. -->
