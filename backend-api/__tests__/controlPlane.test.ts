@@ -1456,6 +1456,43 @@ describe("gateway control-plane embed", () => {
     );
   });
 
+  it("accepts a scoped embed token on its own embed route but not as a session", async () => {
+    const jwt = require("jsonwebtoken");
+    const embedToken = jwt.sign(
+      { id: "user-1", agentId: "agent-1", scope: "gateway-embed" },
+      process.env.JWT_SECRET,
+      { algorithm: "HS256", expiresIn: "15m" },
+    );
+    mockDb.query.mockResolvedValueOnce({
+      rows: [
+        {
+          effective_role: "owner",
+          host: "10.0.0.10",
+          gateway_token: "gateway-password",
+          gateway_host_port: null,
+          status: "running",
+        },
+      ],
+    });
+
+    const embedRes = await request(app)
+      .get(`/agents/agent-1/gateway/embed/bootstrap.js?token=${encodeURIComponent(embedToken)}`)
+      .set("Host", "nora.test");
+    expect(embedRes.status).toBe(200);
+
+    mockDb.query.mockClear();
+    const sessionRes = await request(app)
+      .get("/agents")
+      .set("Authorization", `Bearer ${embedToken}`);
+    expect(sessionRes.status).toBe(401);
+    expect(mockDb.query).not.toHaveBeenCalled();
+
+    const siblingRes = await request(app)
+      .get(`/agents/agent-2/gateway/embed/bootstrap.js?token=${encodeURIComponent(embedToken)}`)
+      .set("Host", "nora.test");
+    expect(siblingRes.status).toBe(401);
+  });
+
   it("does not expose internal gateway config paths before authentication", async () => {
     const res = await request(app)
       .get("/agents/agent-1/gateway/__openclaw__/control-ui-config.json")
