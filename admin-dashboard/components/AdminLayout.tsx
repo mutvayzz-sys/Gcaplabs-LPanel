@@ -101,7 +101,12 @@ export default function AdminLayout({ children }) {
       });
   }
 
-  const showReleaseBanner = Boolean(release?.updateAvailable);
+  // Headmaster: the release banner tracks upstream Nora releases and nudges
+  // admins toward an upgrade that would replace the fork, so it stays hidden.
+  // Flip only once release tracking points at the Headmaster fork.
+  const HEADMASTER_RELEASE_BANNER_ENABLED = false;
+  const showReleaseBanner =
+    HEADMASTER_RELEASE_BANNER_ENABLED && Boolean(release?.updateAvailable);
   const bannerIsCritical = release?.severity === "critical" || release?.upgradeRequired;
   const showSystemBanner = Boolean(
     systemBanner?.active && systemBanner?.title && systemBanner?.message,

@@ -282,7 +282,7 @@ describe("POST /auth/signup", () => {
 
       expect(res.status).toBe(403);
       expect(res.body).toEqual({
-        error: "Registration is disabled by this Nora operator.",
+        error: "Registration is disabled on this Headmaster control panel. Ask an admin for an invitation.",
         code: "SIGNUP_DISABLED",
       });
       expect(hashSpy).not.toHaveBeenCalled();
@@ -298,7 +298,7 @@ describe("POST /auth/signup", () => {
     const ip = "198.51.100.251";
     const hashSpy = jest.spyOn(bcrypt, "hash");
     const disabledResponse = {
-      error: "Registration is disabled by this Nora operator.",
+      error: "Registration is disabled on this Headmaster control panel. Ask an admin for an invitation.",
       code: "SIGNUP_DISABLED",
     };
 
@@ -1239,7 +1239,7 @@ describe("OAuth hardening", () => {
 
     expect(res.status).toBe(403);
     expect(res.body).toEqual({
-      error: "Registration is disabled by this Nora operator.",
+      error: "Registration is disabled on this Headmaster control panel. Ask an admin for an invitation.",
       code: "SIGNUP_DISABLED",
     });
     expect(

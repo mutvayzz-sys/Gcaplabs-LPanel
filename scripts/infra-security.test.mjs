@@ -123,7 +123,7 @@ test("marketing Compose services use an explicit environment allowlist", () => {
   }
 });
 
-test("public nginx templates enforce marketing security and homepage cache headers", () => {
+test("public nginx templates enforce sign-in page security headers", () => {
   const cloudflareNetworks = [
     "173.245.48.0/20",
     "103.21.244.0/22",
@@ -197,30 +197,58 @@ test("public nginx templates enforce marketing security and homepage cache heade
       /~\^\/api\(\/\|\\\?\|\$\) "";[\s\S]*?~\^\/\(app\|admin\)\(\/\|\\\?\|\$\) "SAMEORIGIN";/,
       `${file} must preserve backend embed headers and protect dashboards`,
     );
-    assert.match(
+    assert.doesNotMatch(
       source,
-      /"\/" "public, max-age=0, s-maxage=300, stale-while-revalidate=60";/,
-      `${file} must mark only the homepage for shared caching`,
-    );
-    assert.match(
-      source,
-      /"\/" "public, max-age=300, stale-while-revalidate=60";/,
-      `${file} must give Cloudflare an explicit homepage edge TTL`,
+      /"\/" "public,/,
+      `${file} must not mark any page for shared caching (no public home page)`,
     );
     assert.match(
       source,
       /add_header Cloudflare-CDN-Cache-Control \$marketing_cloudflare_cache_control always;/,
-      `${file} must emit the homepage-only Cloudflare cache policy`,
-    );
-    assert.match(
-      source,
-      /location = \/ \{[\s\S]*?proxy_hide_header Cache-Control;[\s\S]*?proxy_hide_header Strict-Transport-Security;/,
+      `${file} must keep the (now empty) Cloudflare cache hook valid`,
     );
     assert.match(
       source,
       /location = \/admin \{\s*return 308 \/admin\/\$is_args\$args;\s*\}/,
       `${file} must normalize the bare admin path without dropping query arguments`,
     );
+  }
+});
+
+test("every nginx edge hides the upstream marketing site and signup page", () => {
+  for (const file of [
+    "nginx.conf",
+    "infra/nginx_public.conf.template",
+    "infra/nginx_tls.conf",
+    "infra/helm/nora/files/nginx-k8s.conf",
+  ]) {
+    const source = read(file);
+    assert.match(
+      source,
+      /location = \/ \{\s*return 302 \/login\$is_args\$args;\s*\}/,
+      `${file} must send / straight to sign-in`,
+    );
+    assert.match(
+      source,
+      /location \/ \{\s*return 404;\s*\}/,
+      `${file} must 404 every non-allowlisted marketing route`,
+    );
+    const marketingLocations = [
+      ...source.matchAll(/location ([^{]+)\{[^}]*proxy_pass (?:\$marketing_site|http:\/\/frontend-marketing:3000);/g),
+    ].map((match) => match[1].trim());
+    for (const location of marketingLocations) {
+      assert.doesNotMatch(location, /signup|pricing|privacy|terms|sitemap/, `${file}: ${location}`);
+      assert.notEqual(location, "/", `${file} must not proxy the marketing root`);
+    }
+    const allowlist = marketingLocations.find((location) => location.includes("login"));
+    assert.ok(allowlist, `${file} must still proxy the sign-in page`);
+    const pattern = new RegExp(allowlist.replace(/^~\s*/, ""));
+    for (const allowed of ["/login", "/es/login", "/auth/callback", "/auth/oauth/google/callback"]) {
+      assert.match(allowed, pattern, `${file} must allow ${allowed}`);
+    }
+    for (const blocked of ["/", "/signup", "/pricing", "/fr/signup", "/es", "/privacy", "/login-old"]) {
+      assert.doesNotMatch(blocked, pattern, `${file} must not allow ${blocked}`);
+    }
   }
 });
 
@@ -842,7 +870,7 @@ test("setup persists signup availability across existing and generated environme
     /# ── Public Signup Abuse Protection[^\n]*\n([\s\S]*?)(?=\n# ──)/,
   )?.[1];
   assert.ok(exampleSignupSection, ".env.example must expose the public signup section");
-  assert.match(exampleSignupSection, /^SIGNUP_ENABLED=true\nSIGNUP_RATE_LIMIT_BURST_MAX=5$/m);
+  assert.match(exampleSignupSection, /^SIGNUP_ENABLED=false\nSIGNUP_RATE_LIMIT_BURST_MAX=5$/m);
 
   const bashUpdateHelper = bashSetup.match(
     /^ensure_signup_protection_env\(\) \{\n([\s\S]*?)^\}/m,
@@ -850,7 +878,7 @@ test("setup persists signup availability across existing and generated environme
   assert.ok(bashUpdateHelper, "setup.sh must expose ensure_signup_protection_env");
   assert.match(
     bashUpdateHelper,
-    /signup_enabled="\$\(read_env_value "\$env_path" "SIGNUP_ENABLED" "true"\)"[\s\S]*?burst_max="\$\(read_env_value/,
+    /signup_enabled="\$\(read_env_value "\$env_path" "SIGNUP_ENABLED" "false"\)"[\s\S]*?burst_max="\$\(read_env_value/,
   );
   assert.match(
     bashUpdateHelper,
@@ -858,7 +886,7 @@ test("setup persists signup availability across existing and generated environme
   );
   assert.match(
     bashSetup,
-    /^SIGNUP_ENABLED="\$\(read_env_value "\$ENV_FILE" "SIGNUP_ENABLED" "true"\)"$/m,
+    /^SIGNUP_ENABLED="\$\(read_env_value "\$ENV_FILE" "SIGNUP_ENABLED" "false"\)"$/m,
   );
   const bashGeneratedSignupSection = bashSetup.match(
     /# ── Public Signup Abuse Protection[^\n]*\n([\s\S]*?)(?=\n# ── Platform Mode)/,
@@ -875,7 +903,7 @@ test("setup persists signup availability across existing and generated environme
   assert.ok(powershellUpdateHelper, "setup.ps1 must expose Update-SignupProtectionEnv");
   assert.match(
     powershellUpdateHelper,
-    /SIGNUP_ENABLED = \(Read-EnvValue -EnvPath \$EnvPath -Name "SIGNUP_ENABLED" -Default "true"\)[\s\S]*?SIGNUP_RATE_LIMIT_BURST_MAX =/,
+    /SIGNUP_ENABLED = \(Read-EnvValue -EnvPath \$EnvPath -Name "SIGNUP_ENABLED" -Default "false"\)[\s\S]*?SIGNUP_RATE_LIMIT_BURST_MAX =/,
   );
   assert.match(
     powershellUpdateHelper,
@@ -883,7 +911,7 @@ test("setup persists signup availability across existing and generated environme
   );
   assert.match(
     powershellSetup,
-    /^\$SIGNUP_ENABLED = Read-EnvValue -EnvPath \$ENV_FILE -Name "SIGNUP_ENABLED" -Default "true"$/m,
+    /^\$SIGNUP_ENABLED = Read-EnvValue -EnvPath \$ENV_FILE -Name "SIGNUP_ENABLED" -Default "false"$/m,
   );
   const powershellGeneratedSignupSection = powershellSetup.match(
     /# ── Public Signup Abuse Protection[^\n]*\n([\s\S]*?)(?=\n# ── Platform Mode)/,
