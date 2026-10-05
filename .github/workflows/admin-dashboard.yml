@@ -1,0 +1,39 @@
+name: Admin dashboard
+
+# Helper tests and typecheck for admin-dashboard. Linux only, pull requests only,
+# about 1 minute.
+
+on:
+  pull_request:
+    paths:
+      - 'admin-dashboard/**'
+      - '.github/workflows/admin-dashboard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-dashboard-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  admin:
+    name: helpers and typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: admin-dashboard
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: admin-dashboard/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:helpers
+      - run: npm run typecheck
