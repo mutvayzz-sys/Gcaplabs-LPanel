@@ -1,0 +1,45 @@
+name: Backend
+
+# Typecheck and unit tests for backend-api and the shared provisioner adapters.
+# Linux only, pull requests only, about 2 minutes. No Docker, E2E, or deploys.
+
+on:
+  pull_request:
+    paths:
+      - 'backend-api/**'
+      - 'workers/provisioner/**'
+      - 'agent-runtime/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: typecheck and jest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            backend-api/package-lock.json
+            workers/provisioner/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: workers/provisioner
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: backend-api
+      - run: npx tsc --noEmit
+        working-directory: backend-api
+      - run: npx jest --forceExit
+        working-directory: backend-api
