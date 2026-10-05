@@ -21,7 +21,7 @@ const EMPTY: SmtpSettings = {
   smtpSecure: false,
   smtpUsername: "",
   smtpFromAddress: "",
-  smtpFromName: "Nora",
+  smtpFromName: "Headmaster",
   smtpPasswordMasked: "",
   smtpConfigured: false,
 };
@@ -187,13 +187,13 @@ export default function NotificationsSettingsCard() {
             type="email"
             value={form.smtpFromAddress ?? settings.smtpFromAddress}
             onChange={(v) => update("smtpFromAddress", v)}
-            placeholder="nora@example.com"
+            placeholder="alerts@example.com"
           />
           <Field
             label={t("From name")}
             value={form.smtpFromName ?? settings.smtpFromName}
             onChange={(v) => update("smtpFromName", v)}
-            placeholder="Nora"
+            placeholder="Headmaster"
           />
         </div>
 

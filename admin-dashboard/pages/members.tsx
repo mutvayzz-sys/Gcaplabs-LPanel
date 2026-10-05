@@ -108,7 +108,7 @@ export default function AdminMembersPage() {
               </h1>
               <p className="mt-1 text-sm text-slate-500">
                 {t(
-                  "Read-only god view of every workspace, member, and role on this Nora installation.",
+                  "Read-only god view of every workspace, member, and role on this Headmaster Control installation.",
                 )}
               </p>
             </div>

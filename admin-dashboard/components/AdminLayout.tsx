@@ -246,12 +246,12 @@ export default function AdminLayout({ children }) {
                         bannerIsCritical ? "text-red-600" : "text-amber-700",
                       )}
                     >
-                      {bannerIsCritical ? t("Upgrade Required") : t("New Nora Version Available")}
+                      {bannerIsCritical ? t("Upgrade Required") : t("New Version Available")}
                     </p>
                     <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950">
                       {release?.latestVersion
                         ? `${formatVersionLabel(release.latestVersion)} is ready`
-                        : t("A newer Nora release is available")}
+                        : t("A newer release is available")}
                     </h2>
                     <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-700">
                       {release?.currentVersion

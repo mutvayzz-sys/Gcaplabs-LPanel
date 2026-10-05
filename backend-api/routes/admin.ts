@@ -2083,7 +2083,7 @@ router.post(
     const runtimeFamily = normalizeRequestedRuntimeFamily(requestBody.runtime_family);
     if (requestBody.runtime_family != null && runtimeFamily == null) {
       return res.status(400).json({
-        error: `Unsupported runtime_family. Nora currently supports: ${KNOWN_RUNTIME_FAMILIES.map((value) => `"${value}"`).join(", ")}.`,
+        error: `Unsupported runtime_family. Supported values: ${KNOWN_RUNTIME_FAMILIES.map((value) => `"${value}"`).join(", ")}.`,
       });
     }
 
