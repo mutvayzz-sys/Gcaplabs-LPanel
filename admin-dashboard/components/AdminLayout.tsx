@@ -16,6 +16,7 @@ import {
   TriangleAlert,
   Users,
   UsersRound,
+  UserX,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { formatDateTime } from "../lib/format";
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { name: "Remote Hosts", icon: Server, href: "/remote-hosts" },
   { name: "Agent Hub", icon: ShoppingBag, href: "/agent-hub" },
   { name: "Backups", icon: Archive, href: "/backups" },
+  { name: "Account deletions", icon: UserX, href: "/account-deletions" },
   { name: "Audit", icon: FileText, href: "/audit" },
   { name: "Settings", icon: SlidersHorizontal, href: "/settings" },
 ];

@@ -1334,6 +1334,7 @@ app.use("/billing", require("./routes/billing"));
 // guard is redundant but harmless). Same pattern for the platform-admin RBAC
 // god view.
 app.use("/admin/fleet/migrations", require("./routes/fleetMigrations"));
+app.use("/admin/account-deletions", require("./routes/adminAccountDeletions"));
 app.use("/admin", require("./routes/adminMembers"));
 app.use("/admin", require("./routes/admin"));
 
