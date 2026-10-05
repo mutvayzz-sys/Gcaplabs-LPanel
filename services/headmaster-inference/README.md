@@ -64,7 +64,7 @@ to that pair, so a newly approved account can chat on the Headmaster tiers with 
 admin step. Admission signs a relay assertion only for an approved account, so
 this does not open the relay to anyone else. A row still wins over the default, an
 explicitly disabled row (`enabled = false`) still denies, and a lookup failure never
-falls back to the default. An owner served by the default may use the `headmaster-lite` tier only (the model list shows only that tier and Pro/other model ids get 400); a row of their own unlocks the rest. Each use is logged as `default assignment used` with the owner id and a running count, nothing else. Admission checks entitlement and the runtime before it signs anything, so a revoked account or runtime is refused even with no row (covered by a webapp admission test). Leaving both unset keeps the old rule that absence of a
+falls back to the default. An owner served by the default may use the `headmaster-lite` and `headmaster-pro` tiers (Lite stays the default selection; other model ids get 400); a row of their own unlocks the rest. Each use is logged as `default assignment used` with the owner id and a running count, nothing else. Admission checks entitlement and the runtime before it signs anything, so a revoked account or runtime is refused even with no row (covered by a webapp admission test). Leaving both unset keeps the old rule that absence of a
 row denies.
 
 TTL and revocation semantics:
@@ -196,9 +196,13 @@ widens the allowlist and an account with no allowed model gets
 `agent-runtime/lib/headmasterInference.ts` and the desktop's
 `headmaster-trial-provider.ts`; keep them equal.
 
-Monthly allowance: `HEADMASTER_INFERENCE_TOKENS_PER_MONTH` (default 3000000)
-caps prompt + completion tokens per account per UTC calendar month on the
-operator-funded path. Past it the relay answers 429 `monthly_budget_exceeded`
+Monthly allowance: `HEADMASTER_INFERENCE_USD_PER_MONTH` (default 2.00) caps
+spend per account per UTC calendar month on the operator-funded path. Each
+response is charged OpenRouter's reported `usage.cost`; when a response has no
+cost, tokens x the price in `HEADMASTER_INFERENCE_PRICES_JSON`
+(`{"<model>":{"prompt":<USD per 1M>,"completion":<USD per 1M>}}`); with neither,
+the request is charged 0 and logged as `cost unknown`. Once the month's spend
+reaches the cap, the next request is refused. Past it the relay answers 429 `monthly_budget_exceeded`
 ("You have used this month's Headmaster allowance. It resets on the 1st of next
 month (UTC)."). Personal-key traffic is not counted.
 

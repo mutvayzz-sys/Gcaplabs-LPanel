@@ -201,6 +201,34 @@ export function resolveTierModel(model, allowedModels, tierModels = DEFAULT_TIER
   return allowedModels[0] ?? model;
 }
 
+// Fallback price table for responses without usage.cost:
+// { "<model id>": { "prompt": <USD per 1M tokens>, "completion": <USD per 1M tokens> } }
+// from HEADMASTER_INFERENCE_PRICES_JSON. Invalid entries are ignored.
+export function priceTableFromEnv(env = {}) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(env.HEADMASTER_INFERENCE_PRICES_JSON || "{}"));
+  } catch {
+    return Object.freeze({});
+  }
+  const ok = (n) => Number.isFinite(n) && n >= 0;
+  const out = {};
+  for (const [model, price] of Object.entries(parsed && typeof parsed === "object" ? parsed : {})) {
+    if (ok(price?.prompt) && ok(price?.completion)) out[model] = { prompt: price.prompt, completion: price.completion };
+  }
+  return Object.freeze(out);
+}
+
+// Cost of one response in micro-USD: the provider's reported cost when present,
+// else tokens x the configured price for the model, else null (unknown).
+export function costMicroUsd(usage, model, priceTable = {}) {
+  if (!usage) return null;
+  if (usage.costUsd !== null && usage.costUsd !== undefined) return Math.ceil(usage.costUsd * 1_000_000);
+  const price = priceTable[model];
+  if (!price) return null;
+  return Math.ceil(usage.promptTokens * price.prompt + usage.completionTokens * price.completion);
+}
+
 // OpenRouter's catalog id for a provider-native model id, so a client can look up
 // context length and price. Best effort: a model whose OpenRouter id is not
 // certain maps to null and the client shows no bars for it.
@@ -390,5 +418,7 @@ export function normalizeUsage(value) {
   const promptTokens = safe(value?.prompt_tokens ?? value?.input_tokens);
   const completionTokens = safe(value?.completion_tokens ?? value?.output_tokens);
   const totalTokens = safe(value?.total_tokens) || promptTokens + completionTokens;
-  return { promptTokens, completionTokens, totalTokens };
+  // OpenRouter reports the charged amount in USD as usage.cost.
+  const costUsd = Number.isFinite(value?.cost) && value.cost >= 0 ? value.cost : null;
+  return { promptTokens, completionTokens, totalTokens, costUsd };
 }

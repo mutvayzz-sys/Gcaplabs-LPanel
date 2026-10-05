@@ -7,6 +7,7 @@ import {
   allowedModelsForProvider,
   isByoProvider,
   normalizeUsage,
+  costMicroUsd,
   prepareByoChatCompletion,
   prepareChatCompletion,
   providerCompletionUrl,
@@ -181,9 +182,9 @@ async function readProviderResponse(response, cap) {
   return Buffer.concat(chunks);
 }
 
-function onlyTier(tiers, tier) {
-  if (!tier) return tiers;
-  return Object.fromEntries(Object.entries(tiers).filter(([name]) => name === tier));
+function onlyTier(tiers, allowed) {
+  if (!allowed) return tiers;
+  return Object.fromEntries(Object.entries(tiers).filter(([name]) => allowed.includes(name)));
 }
 
 function modelList(models, requestId, tiers = undefined) {
@@ -211,6 +212,8 @@ export function createInferenceService({
   defaultCompletionTokens = 1024,
   // Tier id -> backend model id (see tierModelsFromEnv in policy.mjs).
   tierModels = DEFAULT_TIER_MODELS,
+  // Fallback per-model prices for responses that carry no usage.cost.
+  priceTable = {},
   requestTimeoutMs = 120_000,
   replayStore = null,
   // Personal provider keys (optional). Without both, byo requests fail 503
@@ -226,6 +229,14 @@ export function createInferenceService({
   const hasResolveAssignment = resolveAssignment !== undefined && resolveAssignment !== null;
   if (hasAccountProviderMap === hasResolveAssignment)
     throw new Error("inference_service_dependencies_invalid");
+  function chargedCost(usage, model, requestId) {
+    const cost = costMicroUsd(usage, model, priceTable);
+    if (cost === null && (usage?.promptTokens || usage?.completionTokens)) {
+      logger.warn?.("headmaster-inference cost unknown", { requestId, model });
+      return 0;
+    }
+    return cost ?? 0;
+  }
   if (hasAccountProviderMap && !(accountProviderMap instanceof Map))
     throw new Error("inference_service_dependencies_invalid");
   if (hasResolveAssignment && typeof resolveAssignment !== "function")
@@ -393,8 +404,8 @@ export function createInferenceService({
       mapping.provider === undefined ? { ...mapping, provider: provider.provider } : mapping;
 
     // An owner served by the default assignment (no row of their own) gets the
-    // default tier only; a row of their own is what unlocks the other tiers.
-    const tierOnly = typeof effectiveMapping.tier === "string" ? effectiveMapping.tier : null;
+    // default tiers only (Lite and Pro); a row of their own unlocks other models.
+    const tierOnly = Array.isArray(effectiveMapping.tiers) ? effectiveMapping.tiers : null;
 
     if (req.method === "GET") {
       const models = allowedModelsForProvider(effectiveMapping, provider.models);
@@ -426,12 +437,12 @@ export function createInferenceService({
         claims.request_id,
       );
     }
-    if (tierOnly && parsed?.model !== tierOnly) {
+    if (tierOnly && !tierOnly.includes(parsed?.model)) {
       return safeError(
         res,
         400,
         "model_not_allowed",
-        "This account can use the default Headmaster tier only.",
+        "This account can use the Headmaster tiers only.",
         claims.request_id,
       );
     }
@@ -641,6 +652,7 @@ export function createInferenceService({
           promptTokens: usage.promptTokens,
           completionTokens: usage.completionTokens,
           totalTokens: usage.totalTokens,
+          costMicroUsd: chargedCost(usage, prepared.body?.model, claims.request_id),
         })
         .catch((error) =>
           logger.error?.("headmaster-inference usage accounting failed", {

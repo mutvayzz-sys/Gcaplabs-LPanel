@@ -17,6 +17,8 @@ import {
   openRouterModelId,
   tierAssignments,
   tierModelsFromEnv,
+  priceTableFromEnv,
+  costMicroUsd,
   resolveTierModel,
   DEFAULT_TIER_MODELS,
   parseAccountProviderMap,
@@ -1006,14 +1008,14 @@ test("the inference service accepts exactly one assignment source", () => {
   );
 });
 
-test("an owner on the default assignment sees and may use the default Lite tier only", async (t) => {
+test("an owner on the default assignment sees and may use Lite and Pro, Lite listed first", async (t) => {
   const upstreamCalls = [];
   const f = await startService(t, {
     accountProviderMap: undefined,
     resolveAssignment: async () => ({
       noraUserId: NORA_USER_A,
       providerId: PROVIDER_A,
-      tier: "headmaster-lite",
+      tiers: ["headmaster-lite", "headmaster-pro"],
     }),
     fetchImpl: async (url, options) => {
       upstreamCalls.push(JSON.parse(options.body));
@@ -1026,13 +1028,13 @@ test("an owner on the default assignment sees and may use the default Lite tier 
   const models = await (
     await getModels(f.origin, makeToken({ method: "GET", path: "/v1/models" }))
   ).json();
-  assert.deepEqual(Object.keys(models.headmaster_tiers), ["headmaster-lite"]);
+  assert.deepEqual(Object.keys(models.headmaster_tiers), ["headmaster-lite", "headmaster-pro"]);
 
   for (const [model, status] of [
-    ["headmaster-pro", 400],
     ["headmaster-max", 400],
     ["gpt-5.5-pro", 400],
     ["headmaster-lite", 200],
+    ["headmaster-pro", 200],
   ]) {
     const body = Buffer.from(
       JSON.stringify({ model, messages: [{ role: "user", content: "hi" }] }),
@@ -1040,8 +1042,7 @@ test("an owner on the default assignment sees and may use the default Lite tier 
     const token = makeToken({ method: "POST", path: "/v1/chat/completions", body });
     assert.equal((await postCompletion(f.origin, body, token)).status, status, model);
   }
-  assert.equal(upstreamCalls.length, 1);
-  assert.equal(upstreamCalls[0].model, "gpt-5.5");
+  assert.equal(upstreamCalls.length, 2);
 });
 
 test("Lite and Pro map to their OpenRouter models from config, with env overrides", () => {
@@ -1066,8 +1067,8 @@ test("Lite and Pro map to their OpenRouter models from config, with env override
   });
 });
 
-test("the monthly allowance answers 429 monthly_budget_exceeded in plain Headmaster wording", async (t) => {
-  const quota = createMemoryQuotaStore({ maxTokensPerMonth: 10, now: () => NOW });
+test("the monthly spend cap answers 429 monthly_budget_exceeded in plain Headmaster wording", async (t) => {
+  const quota = createMemoryQuotaStore({ maxMicroUsdPerMonth: 0, now: () => NOW });
   const f = await startService(t, { quotaStore: quota });
   const body = Buffer.from(
     JSON.stringify({ model: "gpt-5.5", messages: [{ role: "user", content: "hi" }] }),
@@ -1081,38 +1082,64 @@ test("the monthly allowance answers 429 monthly_budget_exceeded in plain Headmas
   const error = (await response.json()).error;
   assert.equal(error.code, "monthly_budget_exceeded");
   assert.match(error.message, /this month's Headmaster allowance/);
-  assert.doesNotMatch(error.message, /Hermes|Nous|Nora/);
+  assert.doesNotMatch(error.message, /Hermes|Nous|Nora|token/i);
 });
 
-test("monthly usage accumulates across days in the same UTC month and resets next month", async () => {
-  let at = Date.UTC(2026, 9, 30, 12);
-  const quota = createMemoryQuotaStore({
-    maxTokensPerMonth: 1_000,
-    maxCompletionTokensPerDay: 1_000_000,
-    now: () => at,
+test("spend is charged from OpenRouter usage.cost, else from the configured price table", async (t) => {
+  assert.equal(costMicroUsd({ promptTokens: 10, completionTokens: 10, costUsd: 0.0123 }, "m"), 12_300);
+  const prices = priceTableFromEnv({
+    HEADMASTER_INFERENCE_PRICES_JSON: '{"m":{"prompt":0.5,"completion":2},"bad":{"prompt":-1,"completion":1}}',
   });
-  const first = await quota.acquire({ ownerId: OWNER_A, requestId: "r1", reserveOutputTokens: 100 });
+  assert.deepEqual(Object.keys(prices), ["m"]);
+  assert.equal(costMicroUsd({ promptTokens: 1000, completionTokens: 500, costUsd: null }, "m", prices), 1500);
+  assert.equal(costMicroUsd({ promptTokens: 1000, completionTokens: 500, costUsd: null }, "other", prices), null);
+  assert.deepEqual(priceTableFromEnv({ HEADMASTER_INFERENCE_PRICES_JSON: "not json" }), {});
+
+  const quota = createMemoryQuotaStore({ maxMicroUsdPerMonth: 20_000, now: () => NOW });
+  const f = await startService(t, {
+    quotaStore: quota,
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({ id: "c", choices: [], usage: { prompt_tokens: 5, completion_tokens: 5, cost: 0.015 } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+  });
+  const body = Buffer.from(
+    JSON.stringify({ model: "gpt-5.5", messages: [{ role: "user", content: "hi" }] }),
+  );
+  const send = () =>
+    postCompletion(f.origin, body, makeToken({ method: "POST", path: "/v1/chat/completions", body }));
+  assert.equal((await send()).status, 200); // $0.015 of $0.02
+  assert.equal((await send()).status, 200); // $0.030, now over the cap
+  assert.equal((await send()).status, 429);
+});
+
+test("monthly spend accumulates across days in the same UTC month and resets next month", async () => {
+  let at = Date.UTC(2026, 9, 30, 12);
+  const quota = createMemoryQuotaStore({ maxMicroUsdPerMonth: 1_000, now: () => at });
+  const first = await quota.acquire({ ownerId: OWNER_A, requestId: "r1", reserveOutputTokens: 1 });
   assert.equal(first.allowed, true);
-  await quota.finish({ ownerId: OWNER_A, requestId: "r1", quotaDay: first.day, promptTokens: 600, completionTokens: 300, totalTokens: 900 });
+  await quota.finish({ ownerId: OWNER_A, requestId: "r1", quotaDay: first.day, costMicroUsd: 1_000 });
   at = Date.UTC(2026, 9, 31, 12);
   assert.deepEqual(
-    await quota.acquire({ ownerId: OWNER_A, requestId: "r2", reserveOutputTokens: 200 }),
+    await quota.acquire({ ownerId: OWNER_A, requestId: "r2", reserveOutputTokens: 1 }),
     { allowed: false, reason: "monthly_budget" },
   );
   at = Date.UTC(2026, 10, 1, 1);
-  assert.equal((await quota.acquire({ ownerId: OWNER_A, requestId: "r3", reserveOutputTokens: 200 })).allowed, true);
+  assert.equal((await quota.acquire({ ownerId: OWNER_A, requestId: "r3", reserveOutputTokens: 1 })).allowed, true);
 });
 
-test("Redis quota store passes the month key and monthly cap to its scripts", async () => {
+test("Redis quota store passes the month key, cap and request cost to its scripts", async () => {
   const calls = [];
   const redis = { async eval(...args) { calls.push(args); return [1, "ok"]; } };
-  const quota = createRedisQuotaStore(redis, { maxTokensPerMonth: 777, now: () => Date.UTC(2026, 9, 6) });
+  const quota = createRedisQuotaStore(redis, { maxMicroUsdPerMonth: 777, now: () => Date.UTC(2026, 9, 6) });
   const reservation = await quota.acquire({ ownerId: OWNER_A, requestId: "r1", reserveOutputTokens: 5 });
-  await quota.finish({ ownerId: OWNER_A, requestId: "r1", quotaDay: reservation.day, totalTokens: 9 });
+  await quota.finish({ ownerId: OWNER_A, requestId: "r1", quotaDay: reservation.day, costMicroUsd: 42 });
   assert.equal(calls[0][1], 7);
   assert.equal(calls[0][8], `headmaster-inference:${OWNER_A}:month:2026-10`);
   assert.equal(calls[0].at(-1), 777);
   assert.equal(calls[1][1], 7);
   assert.equal(calls[1][8], `headmaster-inference:${OWNER_A}:month:2026-10`);
+  assert.equal(calls[1].at(-1), 42);
   assert.match(calls[0][0], /monthly_budget/);
 });
