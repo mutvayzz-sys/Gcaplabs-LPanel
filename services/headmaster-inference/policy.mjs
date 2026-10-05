@@ -35,7 +35,9 @@ export const TESTED_PROVIDER_COVERAGE = Object.freeze({
   // endpoint. Its model ids are open-ended, so only ids the live suite
   // (provider.live.test.mjs) exercises end to end are listed; the recorded run
   // status lives in PROVIDERS.md.
-  openrouter: providerCoverage(["deepseek/deepseek-v4.1-flash"]),
+  // xiaomi/mimo-v2.6-pro backs the Pro tier; its id matches the OpenRouter
+  // catalog naming but the live suite has not been run against it yet.
+  openrouter: providerCoverage(["deepseek/deepseek-v4.1-flash", "xiaomi/mimo-v2.6-pro"]),
 });
 
 export function testedProviderModels(provider) {
@@ -157,21 +159,45 @@ export function allowedModelsForProvider(mapping, providerMetadataModels = []) {
   );
 }
 
-// Branded tier ids clients may name. The relay resolves a tier to the account's
-// assigned backend model here, so every client (the desktop's Work engine and a
-// Cloud runtime) can register the same three fixed names without knowing what
-// stands behind them. All three resolve to the first allowed model until the
-// operator assigns tiers to distinct backend models. Keep this list equal to
+// Branded tier ids clients may name. The relay resolves a tier to a backend
+// model here, so every client (the desktop's Work engine and a Cloud runtime)
+// can register the same fixed names without knowing what stands behind them.
+// Only Lite and Pro exist (Max was removed). Keep this list equal to
 // agent-runtime/lib/headmasterInference.ts and the desktop's
 // headmaster-trial-provider.ts.
-export const HEADMASTER_TIER_MODELS = Object.freeze([
-  "headmaster-lite",
-  "headmaster-pro",
-  "headmaster-max",
-]);
+export const HEADMASTER_TIER_MODELS = Object.freeze(["headmaster-lite", "headmaster-pro"]);
 
-export function resolveTierModel(model, allowedModels) {
+// Default backend model per tier, as OpenRouter catalog ids. Override per
+// deployment with HEADMASTER_INFERENCE_TIER_LITE_MODEL /
+// HEADMASTER_INFERENCE_TIER_PRO_MODEL (see tierModelsFromEnv).
+export const DEFAULT_TIER_MODELS = Object.freeze({
+  "headmaster-lite": "deepseek/deepseek-v4.1-flash",
+  "headmaster-pro": "xiaomi/mimo-v2.6-pro",
+});
+
+const TIER_ENV = Object.freeze({
+  "headmaster-lite": "HEADMASTER_INFERENCE_TIER_LITE_MODEL",
+  "headmaster-pro": "HEADMASTER_INFERENCE_TIER_PRO_MODEL",
+});
+
+export function tierModelsFromEnv(env = {}) {
+  return Object.freeze(
+    Object.fromEntries(
+      HEADMASTER_TIER_MODELS.map((tier) => {
+        const configured = String(env[TIER_ENV[tier]] || "").trim();
+        return [tier, configured || DEFAULT_TIER_MODELS[tier]];
+      }),
+    ),
+  );
+}
+
+// A tier resolves to its configured model when the account is allowed that
+// model; otherwise (e.g. an account assigned a non-OpenRouter provider) it
+// falls back to the account's first allowed model. Never widens the allowlist.
+export function resolveTierModel(model, allowedModels, tierModels = DEFAULT_TIER_MODELS) {
   if (!HEADMASTER_TIER_MODELS.includes(model)) return model;
+  const mapped = tierModels?.[model];
+  if (mapped && allowedModels.includes(mapped)) return mapped;
   return allowedModels[0] ?? model;
 }
 
@@ -195,10 +221,10 @@ export function openRouterModelId(provider, model) {
 
 // What each tier resolves to for this account: the same rule prepareChatCompletion
 // applies, reported instead of applied.
-export function tierAssignments(provider, allowedModels) {
+export function tierAssignments(provider, allowedModels, tierModels = DEFAULT_TIER_MODELS) {
   return Object.fromEntries(
     HEADMASTER_TIER_MODELS.map((tier) => {
-      const model = resolveTierModel(tier, allowedModels);
+      const model = resolveTierModel(tier, allowedModels, tierModels);
       const resolved = model !== tier;
       return [
         tier,
@@ -219,7 +245,7 @@ export function prepareChatCompletion(body, mapping, providerMetadataModels, lim
     return { error: "stream_invalid" };
   if (typeof body.model !== "string" || !body.model) return { error: "model_required" };
   const allowedModels = allowedModelsForProvider(mapping, providerMetadataModels);
-  const resolvedModel = resolveTierModel(body.model, allowedModels);
+  const resolvedModel = resolveTierModel(body.model, allowedModels, limits.tierModels);
   if (!allowedModels.includes(resolvedModel)) return { error: "model_not_allowed" };
 
   const limited = limitCompletionTokens(body, mapping.provider, limits, resolvedModel);

@@ -16,6 +16,9 @@ import {
   HEADMASTER_TIER_MODELS,
   openRouterModelId,
   tierAssignments,
+  tierModelsFromEnv,
+  resolveTierModel,
+  DEFAULT_TIER_MODELS,
   parseAccountProviderMap,
   providerCompletionUrl,
 } from "./policy.mjs";
@@ -370,7 +373,7 @@ test("a Headmaster tier id resolves to the account's assigned model before the p
       );
     },
   });
-  for (const tier of ["headmaster-lite", "headmaster-pro", "headmaster-max"]) {
+  for (const tier of ["headmaster-lite", "headmaster-pro"]) {
     const body = Buffer.from(
       JSON.stringify({ model: tier, messages: [{ role: "user", content: "x" }] }),
     );
@@ -380,9 +383,9 @@ test("a Headmaster tier id resolves to the account's assigned model before the p
   }
   assert.deepEqual(
     upstreamCalls.map((call) => call.parsed.model),
-    ["gpt-5.5", "gpt-5.5", "gpt-5.5"],
+    ["gpt-5.5", "gpt-5.5"],
   );
-  assert.deepEqual(HEADMASTER_TIER_MODELS, ["headmaster-lite", "headmaster-pro", "headmaster-max"]);
+  assert.deepEqual(HEADMASTER_TIER_MODELS, ["headmaster-lite", "headmaster-pro"]);
 });
 
 test("the model list reports which backing model each tier resolves to, in OpenRouter form", async (t) => {
@@ -402,7 +405,7 @@ test("tier assignments map providers to OpenRouter ids only when certain, and re
   assert.equal(openRouterModelId("openrouter", "deepseek/deepseek-v4.1-flash"), "deepseek/deepseek-v4.1-flash");
   assert.equal(openRouterModelId("groq", "llama-3.3-70b-versatile"), null);
   assert.equal(openRouterModelId("openai", ""), null);
-  assert.deepEqual(tierAssignments("openai", [])["headmaster-max"], { model: null, openrouter_id: null });
+  assert.deepEqual(tierAssignments("openai", [])["headmaster-pro"], { model: null, openrouter_id: null });
 });
 
 test("a tier id never widens the model allowlist", async (t) => {
@@ -418,7 +421,7 @@ test("a tier id never widens the model allowlist", async (t) => {
     },
   });
   const body = Buffer.from(
-    JSON.stringify({ model: "headmaster-max", messages: [{ role: "user", content: "x" }] }),
+    JSON.stringify({ model: "headmaster-pro", messages: [{ role: "user", content: "x" }] }),
   );
   const token = makeToken({ method: "POST", path: "/v1/chat/completions", body });
   const response = await postCompletion(f.origin, body, token);
@@ -1039,4 +1042,77 @@ test("an owner on the default assignment sees and may use the default Lite tier 
   }
   assert.equal(upstreamCalls.length, 1);
   assert.equal(upstreamCalls[0].model, "gpt-5.5");
+});
+
+test("Lite and Pro map to their OpenRouter models from config, with env overrides", () => {
+  assert.deepEqual(DEFAULT_TIER_MODELS, {
+    "headmaster-lite": "deepseek/deepseek-v4.1-flash",
+    "headmaster-pro": "xiaomi/mimo-v2.6-pro",
+  });
+  assert.deepEqual(tierModelsFromEnv({}), DEFAULT_TIER_MODELS);
+  const overridden = tierModelsFromEnv({ HEADMASTER_INFERENCE_TIER_PRO_MODEL: " vendor/other " });
+  assert.equal(overridden["headmaster-pro"], "vendor/other");
+  assert.equal(overridden["headmaster-lite"], "deepseek/deepseek-v4.1-flash");
+  const allowed = ["deepseek/deepseek-v4.1-flash", "xiaomi/mimo-v2.6-pro"];
+  assert.equal(resolveTierModel("headmaster-lite", allowed), "deepseek/deepseek-v4.1-flash");
+  assert.equal(resolveTierModel("headmaster-pro", allowed), "xiaomi/mimo-v2.6-pro");
+  // A mapped model the account is not allowed never widens the allowlist.
+  assert.equal(resolveTierModel("headmaster-pro", ["deepseek/deepseek-v4.1-flash"]), "deepseek/deepseek-v4.1-flash");
+  // Max is gone: it is no longer a tier, so it is passed through and rejected as a model.
+  assert.equal(resolveTierModel("headmaster-max", allowed), "headmaster-max");
+  assert.deepEqual(tierAssignments("openrouter", allowed), {
+    "headmaster-lite": { model: "deepseek/deepseek-v4.1-flash", openrouter_id: "deepseek/deepseek-v4.1-flash" },
+    "headmaster-pro": { model: "xiaomi/mimo-v2.6-pro", openrouter_id: "xiaomi/mimo-v2.6-pro" },
+  });
+});
+
+test("the monthly allowance answers 429 monthly_budget_exceeded in plain Headmaster wording", async (t) => {
+  const quota = createMemoryQuotaStore({ maxTokensPerMonth: 10, now: () => NOW });
+  const f = await startService(t, { quotaStore: quota });
+  const body = Buffer.from(
+    JSON.stringify({ model: "gpt-5.5", messages: [{ role: "user", content: "hi" }] }),
+  );
+  const response = await postCompletion(
+    f.origin,
+    body,
+    makeToken({ method: "POST", path: "/v1/chat/completions", body }),
+  );
+  assert.equal(response.status, 429);
+  const error = (await response.json()).error;
+  assert.equal(error.code, "monthly_budget_exceeded");
+  assert.match(error.message, /this month's Headmaster allowance/);
+  assert.doesNotMatch(error.message, /Hermes|Nous|Nora/);
+});
+
+test("monthly usage accumulates across days in the same UTC month and resets next month", async () => {
+  let at = Date.UTC(2026, 9, 30, 12);
+  const quota = createMemoryQuotaStore({
+    maxTokensPerMonth: 1_000,
+    maxCompletionTokensPerDay: 1_000_000,
+    now: () => at,
+  });
+  const first = await quota.acquire({ ownerId: OWNER_A, requestId: "r1", reserveOutputTokens: 100 });
+  assert.equal(first.allowed, true);
+  await quota.finish({ ownerId: OWNER_A, requestId: "r1", quotaDay: first.day, promptTokens: 600, completionTokens: 300, totalTokens: 900 });
+  at = Date.UTC(2026, 9, 31, 12);
+  assert.deepEqual(
+    await quota.acquire({ ownerId: OWNER_A, requestId: "r2", reserveOutputTokens: 200 }),
+    { allowed: false, reason: "monthly_budget" },
+  );
+  at = Date.UTC(2026, 10, 1, 1);
+  assert.equal((await quota.acquire({ ownerId: OWNER_A, requestId: "r3", reserveOutputTokens: 200 })).allowed, true);
+});
+
+test("Redis quota store passes the month key and monthly cap to its scripts", async () => {
+  const calls = [];
+  const redis = { async eval(...args) { calls.push(args); return [1, "ok"]; } };
+  const quota = createRedisQuotaStore(redis, { maxTokensPerMonth: 777, now: () => Date.UTC(2026, 9, 6) });
+  const reservation = await quota.acquire({ ownerId: OWNER_A, requestId: "r1", reserveOutputTokens: 5 });
+  await quota.finish({ ownerId: OWNER_A, requestId: "r1", quotaDay: reservation.day, totalTokens: 9 });
+  assert.equal(calls[0][1], 7);
+  assert.equal(calls[0][8], `headmaster-inference:${OWNER_A}:month:2026-10`);
+  assert.equal(calls[0].at(-1), 777);
+  assert.equal(calls[1][1], 7);
+  assert.equal(calls[1][8], `headmaster-inference:${OWNER_A}:month:2026-10`);
+  assert.match(calls[0][0], /monthly_budget/);
 });

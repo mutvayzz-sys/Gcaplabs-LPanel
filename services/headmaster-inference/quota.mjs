@@ -17,6 +17,17 @@
 // released, so a dead request neither blocks concurrency forever nor permanently
 // exhausts the daily token budget.
 
+// Calendar month (UTC) a quota day belongs to, e.g. "2026-10". The monthly
+// allowance is attributed to the month of the reservation's day.
+export function monthOfDay(day) {
+  return new Date(day * 86_400_000).toISOString().slice(0, 7);
+}
+
+// Default per-account monthly allowance in tokens (prompt + completion) on the
+// operator-funded path. Override with HEADMASTER_INFERENCE_TOKENS_PER_MONTH.
+export const DEFAULT_TOKENS_PER_MONTH = 3_000_000;
+const MONTH_TTL_SECONDS = 40 * 24 * 60 * 60;
+
 const ACQUIRE_SCRIPT = `
 local requestCount = tonumber(redis.call('GET', KEYS[1]) or '0')
 if requestCount >= tonumber(ARGV[4]) then return {0, 'request_budget'} end
@@ -40,6 +51,8 @@ local used = tonumber(redis.call('GET', KEYS[4]) or '0')
 local reserved = tonumber(redis.call('GET', KEYS[3]) or '0')
 local reserve = tonumber(ARGV[5])
 if used + reserved + reserve > tonumber(ARGV[6]) then return {0, 'token_budget'} end
+local monthUsed = tonumber(redis.call('GET', KEYS[7]) or '0')
+if monthUsed + reserved + reserve > tonumber(ARGV[10]) then return {0, 'monthly_budget'} end
 redis.call('INCR', KEYS[1])
 if requestCount == 0 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[8])) end
 redis.call('ZADD', KEYS[2], tonumber(ARGV[1]), ARGV[7])
@@ -53,7 +66,8 @@ return {1, 'ok'}
 `;
 
 // ARGV: 1=requestId, 2=output tokens, 3=prompt tokens, 4=total tokens,
-//       5=usage ttl seconds, 6=active ttl seconds.
+//       5=usage ttl seconds, 6=active ttl seconds, 7=monthly ttl seconds.
+// KEYS[7] is the account's calendar-month token counter (prompt + completion).
 // The settled marker (KEYS[6]) makes settlement idempotent per request id: the whole
 // script is atomic, so a duplicate finish is a no-op and cannot charge usage twice.
 const FINISH_SCRIPT = `
@@ -77,6 +91,12 @@ if output > 0 then redis.call('INCRBY', KEYS[4], output) end
 if prompt > 0 then redis.call('HINCRBY', KEYS[5], 'prompt_tokens', prompt) end
 if output > 0 then redis.call('HINCRBY', KEYS[5], 'completion_tokens', output) end
 if total > 0 then redis.call('HINCRBY', KEYS[5], 'total_tokens', total) end
+local monthly = total
+if monthly <= 0 then monthly = prompt + output end
+if monthly > 0 then
+  redis.call('INCRBY', KEYS[7], monthly)
+  redis.call('EXPIRE', KEYS[7], tonumber(ARGV[7]))
+end
 redis.call('EXPIRE', KEYS[4], tonumber(ARGV[5]))
 redis.call('EXPIRE', KEYS[5], tonumber(ARGV[5]))
 redis.call('EXPIRE', KEYS[6], tonumber(ARGV[5]))
@@ -90,6 +110,7 @@ export function createRedisQuotaStore(
     maxConcurrentPerAccount = 3,
     maxRequestsPerHour = 120,
     maxCompletionTokensPerDay = 120_000,
+    maxTokensPerMonth = DEFAULT_TOKENS_PER_MONTH,
     activeTimeoutMs = 15 * 60_000,
     usageTtlSeconds = 90 * 24 * 60 * 60,
     now = () => Date.now(),
@@ -104,13 +125,14 @@ export function createRedisQuotaStore(
       const day = Math.floor(at / 86_400_000);
       const result = await redis.eval(
         ACQUIRE_SCRIPT,
-        6,
+        7,
         key(ownerId, `requests:${hour}`),
         key(ownerId, "active"),
         key(ownerId, `reserved:${day}`),
         key(ownerId, `output:${day}`),
         key(ownerId, `reservations:${day}`),
         key(ownerId, `settled:${day}`),
+        key(ownerId, `month:${monthOfDay(day)}`),
         at,
         at - activeTimeoutMs,
         maxConcurrentPerAccount,
@@ -120,6 +142,7 @@ export function createRedisQuotaStore(
         requestId,
         3_700,
         activeTtlSeconds,
+        maxTokensPerMonth,
       );
       return {
         allowed: Number(result?.[0]) === 1,
@@ -138,19 +161,21 @@ export function createRedisQuotaStore(
       const day = Number.isSafeInteger(quotaDay) ? quotaDay : Math.floor(now() / 86_400_000);
       return redis.eval(
         FINISH_SCRIPT,
-        6,
+        7,
         key(ownerId, "active"),
         key(ownerId, `reservations:${day}`),
         key(ownerId, `reserved:${day}`),
         key(ownerId, `output:${day}`),
         key(ownerId, `usage:${day}`),
         key(ownerId, `settled:${day}`),
+        key(ownerId, `month:${monthOfDay(day)}`),
         requestId,
         completionTokens,
         promptTokens,
         totalTokens,
         usageTtlSeconds,
         activeTtlSeconds,
+        MONTH_TTL_SECONDS,
       );
     },
   };
@@ -160,6 +185,7 @@ export function createMemoryQuotaStore({
   maxConcurrentPerAccount = 3,
   maxRequestsPerHour = 120,
   maxCompletionTokensPerDay = 120_000,
+  maxTokensPerMonth = DEFAULT_TOKENS_PER_MONTH,
   activeTimeoutMs = 15 * 60_000,
   now = () => Date.now(),
 } = {}) {
@@ -175,6 +201,7 @@ export function createMemoryQuotaStore({
         reservedByDay: new Map(), // day -> outstanding reserved output tokens
         usedByDay: new Map(), // day -> charged output tokens
         usageByDay: new Map(), // day -> { promptTokens, completionTokens, totalTokens }
+        usedByMonth: new Map(), // "YYYY-MM" -> charged prompt + completion tokens
       });
     return accounts.get(ownerId);
   };
@@ -219,6 +246,8 @@ export function createMemoryQuotaStore({
       const reserved = account.reservedByDay.get(day) || 0;
       if (used + reserved + reserveOutputTokens > maxCompletionTokensPerDay)
         return { allowed: false, reason: "token_budget" };
+      if ((account.usedByMonth.get(monthOfDay(day)) || 0) + reserved + reserveOutputTokens > maxTokensPerMonth)
+        return { allowed: false, reason: "monthly_budget" };
       account.requests.push({ hour });
       account.active.set(requestId, { at, day });
       account.settled.delete(requestId);
@@ -246,6 +275,9 @@ export function createMemoryQuotaStore({
       usage.completionTokens += completionTokens;
       usage.totalTokens += totalTokens;
       account.usageByDay.set(day, usage);
+      const monthly = totalTokens > 0 ? totalTokens : promptTokens + completionTokens;
+      const month = monthOfDay(day);
+      account.usedByMonth.set(month, (account.usedByMonth.get(month) || 0) + monthly);
       return [released, completionTokens];
     },
     inspect(ownerId) {
@@ -283,6 +315,7 @@ export function createRedisByoQuotaStore(
     maxConcurrentPerAccount,
     maxRequestsPerHour,
     maxCompletionTokensPerDay: BYO_UNLIMITED_TOKENS,
+    maxTokensPerMonth: BYO_UNLIMITED_TOKENS,
   });
 }
 
@@ -296,5 +329,6 @@ export function createMemoryByoQuotaStore({
     maxConcurrentPerAccount,
     maxRequestsPerHour,
     maxCompletionTokensPerDay: BYO_UNLIMITED_TOKENS,
+    maxTokensPerMonth: BYO_UNLIMITED_TOKENS,
   });
 }

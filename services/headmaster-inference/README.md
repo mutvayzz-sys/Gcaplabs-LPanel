@@ -56,7 +56,7 @@ Required private settings:
 - `HEADMASTER_INFERENCE_ASSIGNMENT_TTL_MS`: optional assignment cache lifetime
   in milliseconds, default 30000, clamped to 1000..300000.
 
-Default assignment (Lite/Pro/Max for every approved account): set both
+Default assignment (Lite/Pro for every approved account): set both
 `HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID` (the operator's Nora user UUID) and
 `HEADMASTER_INFERENCE_DEFAULT_PROVIDER_ID` (the `llm_providers` row UUID that
 backs the tiers), or neither. When set, an owner with no assignment row resolves
@@ -64,7 +64,7 @@ to that pair, so a newly approved account can chat on the Headmaster tiers with 
 admin step. Admission signs a relay assertion only for an approved account, so
 this does not open the relay to anyone else. A row still wins over the default, an
 explicitly disabled row (`enabled = false`) still denies, and a lookup failure never
-falls back to the default. An owner served by the default may use the `headmaster-lite` tier only (the model list shows only that tier and Pro/Max/other model ids get 400); a row of their own unlocks the rest. Each use is logged as `default assignment used` with the owner id and a running count, nothing else. Admission checks entitlement and the runtime before it signs anything, so a revoked account or runtime is refused even with no row (covered by a webapp admission test). Leaving both unset keeps the old rule that absence of a
+falls back to the default. An owner served by the default may use the `headmaster-lite` tier only (the model list shows only that tier and Pro/other model ids get 400); a row of their own unlocks the rest. Each use is logged as `default assignment used` with the owner id and a running count, nothing else. Admission checks entitlement and the runtime before it signs anything, so a revoked account or runtime is refused even with no row (covered by a webapp admission test). Leaving both unset keeps the old rule that absence of a
 row denies.
 
 TTL and revocation semantics:
@@ -180,14 +180,27 @@ the same signed assertion plus an extra claim `byo_provider: <provider>`.
 
 ## Model names
 
-Clients may name a Headmaster tier (`headmaster-lite`, `headmaster-pro`,
-`headmaster-max`). The relay resolves a tier to the account's first allowed model
-before the provider call, so a tier never widens the allowlist: an account with
-no allowed model gets `model_not_allowed`. All three tiers use the same backend
-model until the operator assigns distinct ones. `GET /v1/models` still lists the
-real allowed models; the desktop and Cloud runtimes register the tier names
-themselves. The list lives in `policy.mjs`, `agent-runtime/lib/headmasterInference.ts`
-and the desktop's `headmaster-trial-provider.ts`; keep them equal.
+Clients may name a Headmaster tier (`headmaster-lite`, `headmaster-pro`; Max was
+removed). The relay maps each tier to a backend model from config:
+
+- `HEADMASTER_INFERENCE_TIER_LITE_MODEL`, default `deepseek/deepseek-v4.1-flash`
+  (DeepSeek V4.1 Flash on OpenRouter).
+- `HEADMASTER_INFERENCE_TIER_PRO_MODEL`, default `xiaomi/mimo-v2.6-pro`
+  (MiMo V2.6 Pro on OpenRouter).
+
+A tier resolves to its mapped model only when the account is allowed it;
+otherwise it falls back to the account's first allowed model, so a tier never
+widens the allowlist and an account with no allowed model gets
+`model_not_allowed`. `GET /v1/models` reports the resolution per account in
+`headmaster_tiers`. The tier list lives in `policy.mjs`,
+`agent-runtime/lib/headmasterInference.ts` and the desktop's
+`headmaster-trial-provider.ts`; keep them equal.
+
+Monthly allowance: `HEADMASTER_INFERENCE_TOKENS_PER_MONTH` (default 3000000)
+caps prompt + completion tokens per account per UTC calendar month on the
+operator-funded path. Past it the relay answers 429 `monthly_budget_exceeded`
+("You have used this month's Headmaster allowance. It resets on the 1st of next
+month (UTC)."). Personal-key traffic is not counted.
 
 ## Limits and behavior
 

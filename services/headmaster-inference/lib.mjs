@@ -13,6 +13,7 @@ import {
   providerModelsUrl,
   safeProviderError,
   tierAssignments,
+  DEFAULT_TIER_MODELS,
 } from "./policy.mjs";
 
 export const MAX_REQUEST_BYTES = 36 * 1024 * 1024;
@@ -208,6 +209,8 @@ export function createInferenceService({
   maxResponseBytes = MAX_RESPONSE_BYTES,
   maxCompletionTokens = 4096,
   defaultCompletionTokens = 1024,
+  // Tier id -> backend model id (see tierModelsFromEnv in policy.mjs).
+  tierModels = DEFAULT_TIER_MODELS,
   requestTimeoutMs = 120_000,
   replayStore = null,
   // Personal provider keys (optional). Without both, byo requests fail 503
@@ -406,7 +409,7 @@ export function createInferenceService({
       return sendJson(
         res,
         200,
-        modelList(models, claims.request_id, onlyTier(tierAssignments(effectiveMapping.provider, models), tierOnly)),
+        modelList(models, claims.request_id, onlyTier(tierAssignments(effectiveMapping.provider, models, tierModels), tierOnly)),
         claims.request_id,
       );
     }
@@ -435,6 +438,7 @@ export function createInferenceService({
     const prepared = prepareChatCompletion(parsed, effectiveMapping, provider.models, {
       maxCompletionTokens,
       defaultCompletionTokens,
+      tierModels,
     });
     if (prepared.error) {
       return safeError(
@@ -480,6 +484,14 @@ export function createInferenceService({
         claims.request_id,
       );
     if (!reservation.allowed) {
+      if (reservation.reason === "monthly_budget")
+        return safeError(
+          res,
+          429,
+          "monthly_budget_exceeded",
+          "You have used this month's Headmaster allowance. It resets on the 1st of next month (UTC).",
+          claims.request_id,
+        );
       const code =
         reservation.reason === "concurrency"
           ? "too_many_concurrent_requests"

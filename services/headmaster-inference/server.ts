@@ -19,6 +19,7 @@ const { createRedisReplayStore } = require("./assertion.mjs");
 const { createRedisQuotaStore, createRedisByoQuotaStore } = require("./quota.mjs");
 const { createProviderKeyResolver } = require("./byo.mjs");
 const { createInferenceService } = require("./lib.mjs");
+const { tierModelsFromEnv } = require("./policy.mjs");
 
 function positiveInt(value, fallback, max) {
   const parsed = Number.parseInt(String(value || ""), 10);
@@ -87,6 +88,12 @@ async function main() {
       120_000,
       100_000_000,
     ),
+    // Per-account monthly allowance (prompt + completion tokens, UTC month).
+    maxTokensPerMonth: positiveInt(
+      process.env.HEADMASTER_INFERENCE_TOKENS_PER_MONTH,
+      3_000_000,
+      10_000_000_000,
+    ),
   });
   // Personal provider keys. Always constructed (never throws): with an unset or
   // short HEADMASTER_PROVIDER_KEY_SECRET, or without the Headmaster Supabase
@@ -139,6 +146,7 @@ async function main() {
       1024,
       32_768,
     ),
+    tierModels: tierModelsFromEnv(process.env),
     requestTimeoutMs: positiveInt(process.env.HEADMASTER_INFERENCE_TIMEOUT_MS, 120_000, 600_000),
     logger: console,
   });
