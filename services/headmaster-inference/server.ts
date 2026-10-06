@@ -19,11 +19,18 @@ const { createRedisReplayStore } = require("./assertion.mjs");
 const { createRedisQuotaStore, createRedisByoQuotaStore } = require("./quota.mjs");
 const { createProviderKeyResolver } = require("./byo.mjs");
 const { createInferenceService } = require("./lib.mjs");
+const { tierModelsFromEnv, priceTableFromEnv } = require("./policy.mjs");
 
 function positiveInt(value, fallback, max) {
   const parsed = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
   return Math.min(parsed, max);
+}
+
+function usdToMicro(value, fallbackUsd) {
+  const parsed = Number.parseFloat(String(value ?? ""));
+  const usd = Number.isFinite(parsed) && parsed >= 0 ? parsed : fallbackUsd;
+  return Math.round(Math.min(usd, 1_000_000) * 1_000_000);
 }
 
 function requiredSecret() {
@@ -87,6 +94,8 @@ async function main() {
       120_000,
       100_000_000,
     ),
+    // Per-account monthly spend cap in USD (UTC calendar month), stored in micro-USD.
+    maxMicroUsdPerMonth: usdToMicro(process.env.HEADMASTER_INFERENCE_USD_PER_MONTH, 2),
   });
   // Personal provider keys. Always constructed (never throws): with an unset or
   // short HEADMASTER_PROVIDER_KEY_SECRET, or without the Headmaster Supabase
@@ -139,6 +148,8 @@ async function main() {
       1024,
       32_768,
     ),
+    tierModels: tierModelsFromEnv(process.env),
+    priceTable: priceTableFromEnv(process.env),
     requestTimeoutMs: positiveInt(process.env.HEADMASTER_INFERENCE_TIMEOUT_MS, 120_000, 600_000),
     logger: console,
   });

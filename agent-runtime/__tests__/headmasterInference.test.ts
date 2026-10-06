@@ -32,7 +32,6 @@ describe("Headmaster tier definition", () => {
     expect([...HEADMASTER_TIER_MODELS]).toEqual([
       "headmaster-lite",
       "headmaster-pro",
-      "headmaster-max",
     ]);
     expect(HEADMASTER_DEFAULT_TIER).toBe("headmaster-lite");
   });
@@ -155,9 +154,16 @@ describe("container bootstrap writes the managed model block", () => {
 
   it("keeps the tier the user already chose", () => {
     const config = runBootstrap(buildHeadmasterModelConfig({}), {
+      model: { provider: "headmaster", default: "headmaster-pro" },
+    });
+    expect(config.model.default).toBe("headmaster-pro");
+  });
+
+  it("resets a retired Max choice to the managed default", () => {
+    const config = runBootstrap(buildHeadmasterModelConfig({}), {
       model: { provider: "headmaster", default: "headmaster-max" },
     });
-    expect(config.model.default).toBe("headmaster-max");
+    expect(config.model.default).toBe("headmaster-lite");
   });
 
   it("keeps every other provider entry, including personal-key entries, across a restart", () => {

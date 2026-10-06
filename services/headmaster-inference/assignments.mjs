@@ -19,6 +19,8 @@ export const ASSIGNMENT_MAX_BODY_BYTES = 65_536;
 const ASSIGNMENT_PATH = "/rest/v1/headmaster_inference_assignments";
 // The tier an owner without an assignment row is limited to.
 export const DEFAULT_ASSIGNMENT_TIER = "headmaster-lite";
+// The tiers an owner without an assignment row may use (Lite stays the default selection).
+export const DEFAULT_ASSIGNMENT_TIERS = Object.freeze(["headmaster-lite", "headmaster-pro"]);
 const quietLogger = { info() {}, warn() {}, error() {} };
 
 function assignmentError(message, code) {
@@ -134,7 +136,7 @@ function normalizeDefaultAssignment(value) {
       "assignment_config_invalid",
     );
   }
-  return Object.freeze({ noraUserId, providerId, tier: DEFAULT_ASSIGNMENT_TIER });
+  return Object.freeze({ noraUserId, providerId, tiers: DEFAULT_ASSIGNMENT_TIERS });
 }
 
 // HEADMASTER_INFERENCE_DEFAULT_NORA_USER_ID and _PROVIDER_ID together, or neither.
@@ -164,7 +166,7 @@ export function createSupabaseAssignmentResolver({
   // Optional reference-only default (Nora user + provider row) for an owner with no
   // assignment row at all. Admission signs a relay assertion only for an approved
   // account, so an owner with no row who reaches the relay is approved and gets
-  // the default (the Headmaster Lite/Pro/Max tiers); an explicitly disabled row
+  // the default (the Headmaster Lite and Pro tiers); an explicitly disabled row
   // still denies, and a row replaces the default.
   const fallback = normalizeDefaultAssignment(defaultAssignment);
   const base = validateSupabaseOrigin(supabaseUrl);
