@@ -282,7 +282,6 @@ describe("Headmaster managed model block", () => {
     expect(Object.keys(config.providers.headmaster.models)).toEqual([
       "headmaster-lite",
       "headmaster-pro",
-      "headmaster-max",
     ]);
     expect(config.providers.headmaster.discover_models).toBe(false);
   });
