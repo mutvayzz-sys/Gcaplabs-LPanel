@@ -206,10 +206,18 @@ export function resolveTierModel(model, allowedModels, tierModels = DEFAULT_TIER
 // Fallback price table for responses without usage.cost:
 // { "<model id>": { "prompt": <USD per 1M tokens>, "completion": <USD per 1M tokens> } }
 // from HEADMASTER_INFERENCE_PRICES_JSON. Invalid entries are ignored.
+// When the variable is unset, the default is OpenRouter's published price for
+// the two tier models, USD per 1M tokens, read 2026-10-06 from
+// https://openrouter.ai/api/v1/models (page: https://openrouter.ai/<model id>).
+export const DEFAULT_PRICES_JSON = JSON.stringify({
+  "deepseek/deepseek-v4.1-flash": { prompt: 0.003, completion: 2.4 },
+  "xiaomi/mimo-v2.6-pro": { prompt: 0.435, completion: 0.87 },
+});
+
 export function priceTableFromEnv(env = {}) {
   let parsed;
   try {
-    parsed = JSON.parse(String(env.HEADMASTER_INFERENCE_PRICES_JSON || "{}"));
+    parsed = JSON.parse(String(env.HEADMASTER_INFERENCE_PRICES_JSON || DEFAULT_PRICES_JSON));
   } catch {
     return Object.freeze({});
   }

@@ -200,7 +200,8 @@ Monthly allowance: `HEADMASTER_INFERENCE_USD_PER_MONTH` (default 2.00) caps
 spend per account per UTC calendar month on the operator-funded path. Each
 response is charged OpenRouter's reported `usage.cost`; when a response has no
 cost, tokens x the price in `HEADMASTER_INFERENCE_PRICES_JSON`
-(`{"<model>":{"prompt":<USD per 1M>,"completion":<USD per 1M>}}`); with neither,
+(`{"<model>":{"prompt":<USD per 1M>,"completion":<USD per 1M>}}`, defaulting to
+OpenRouter's published prices for the Lite and Pro models); with neither,
 the request is charged 0 and logged as `cost unknown`. Once the month's spend
 reaches the cap, the next request is refused. Past it the relay answers 429 `monthly_budget_exceeded`
 ("You have used this month's Headmaster allowance. It resets on the 1st of next

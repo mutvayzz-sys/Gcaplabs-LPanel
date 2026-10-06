@@ -1094,6 +1094,7 @@ test("spend is charged from OpenRouter usage.cost, else from the configured pric
   assert.equal(costMicroUsd({ promptTokens: 1000, completionTokens: 500, costUsd: null }, "m", prices), 1500);
   assert.equal(costMicroUsd({ promptTokens: 1000, completionTokens: 500, costUsd: null }, "other", prices), null);
   assert.deepEqual(priceTableFromEnv({ HEADMASTER_INFERENCE_PRICES_JSON: "not json" }), {});
+  assert.deepEqual(Object.keys(priceTableFromEnv({})).sort(), ["deepseek/deepseek-v4.1-flash", "xiaomi/mimo-v2.6-pro"]);
 
   const quota = createMemoryQuotaStore({ maxMicroUsdPerMonth: 20_000, now: () => NOW });
   const f = await startService(t, {
