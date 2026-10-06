@@ -91,6 +91,21 @@ function headmasterInferenceContainerEnv(apiServerKey, env = process.env) {
 }
 
 /**
+ * Shared secret that lets a runtime trust the X-Headmaster-Relay header, which
+ * only the webapp admission gateway should attach. Injected only when the
+ * operator has set HEADMASTER_RELAY_SECRET for the provisioner; with no value
+ * nothing is added, so the runtime keeps its previous behaviour. The value is
+ * never logged or persisted by Nora.
+ *
+ * @param {Object} [env=process.env] - Environment holding HEADMASTER_RELAY_SECRET.
+ * @returns {Object} Env entries for the container (empty when unset).
+ */
+function headmasterRelayContainerEnv(env = process.env) {
+  const secret = String(env?.HEADMASTER_RELAY_SECRET || "").trim();
+  return secret ? { HEADMASTER_RELAY_SECRET: secret } : {};
+}
+
+/**
  * Synthetic default-provider row for a Headmaster-managed runtime, shaped like
  * an `llm_providers` row so the existing model-config builders can consume it.
  *
@@ -218,6 +233,7 @@ module.exports = {
   deriveHeadmasterInferenceKey,
   headmasterInferenceBaseUrl,
   headmasterInferenceContainerEnv,
+  headmasterRelayContainerEnv,
   buildHeadmasterProviderRow,
   buildHeadmasterModelConfig,
   buildHeadmasterProviderEntry,
