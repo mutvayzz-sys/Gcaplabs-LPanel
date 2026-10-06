@@ -34,7 +34,7 @@ export default function Dashboard() {
         <header className="flex flex-col gap-2">
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">System Overview</h1>
           <p className="text-slate-400 font-medium">
-            Global status of your Nora fleet.
+            Global status of your LPanel fleet.
             {!hasAgents && !loading
               ? " Start with provider setup, then deploy your first OpenClaw agent."
               : ""}
@@ -156,7 +156,7 @@ function EmptyState() {
         </div>
         <h3 className="text-2xl font-black text-slate-900">No agents deployed yet</h3>
         <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
-          Nora comes online fastest when you add a provider key, deploy an OpenClaw agent, then
+          LPanel comes online fastest when you add a provider key, deploy an OpenClaw agent, then
           confirm chat, logs, and terminal from one operator surface.
         </p>
       </div>
@@ -189,7 +189,7 @@ function EmptyState() {
 
       <ActivationChecklist
         compact
-        title="Activate Nora"
+        title="Activate LPanel"
         subtitle="Use this first-run checklist to move from setup to a live runtime without guessing the next step."
       />
     </div>

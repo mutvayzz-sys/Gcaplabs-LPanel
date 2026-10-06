@@ -997,7 +997,7 @@ function QrLoginDialog({
               {state.channel?.name || "Channel"} QR Login
             </p>
             <p className="mt-1 text-[11px] text-slate-500">
-              Nora is forwarding this pairing flow through the underlying OpenClaw gateway.
+              LPanel is forwarding this pairing flow through the underlying OpenClaw gateway.
             </p>
           </div>
           <button
@@ -1884,14 +1884,14 @@ export default function ChannelsTab({ agentId }: { agentId: string }) {
         <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
-              {payload.runtime === "openclaw" ? "OpenClaw Catalog" : "Nora Channels"}
+              {payload.runtime === "openclaw" ? "OpenClaw Catalog" : "LPanel Channels"}
             </p>
             <p className="mt-1 text-sm font-bold text-slate-900">{payload.title || "Channels"}</p>
             <p className="mt-1 text-xs text-slate-500">
               {payload.description ||
                 (payload.runtime === "openclaw"
-                  ? "Nora manages the underlying OpenClaw channel configuration here."
-                  : "Configure Nora’s built-in channel adapters.")}
+                  ? "LPanel manages the underlying OpenClaw channel configuration here."
+                  : "Configure LPanel’s built-in channel adapters.")}
             </p>
             {payload.runtime === "openclaw" ? (
               <p className="mt-2 text-[11px] text-slate-500">
@@ -1976,7 +1976,7 @@ export default function ChannelsTab({ agentId }: { agentId: string }) {
             <p className="mt-1 text-xs text-slate-500">
               {payload.runtime === "openclaw"
                 ? "Refresh once the OpenClaw gateway exposes its channel catalog."
-                : "Add a channel to let this agent send and receive messages outside Nora."}
+                : "Add a channel to let this agent send and receive messages outside LPanel."}
             </p>
           </div>
         ) : (
@@ -2284,9 +2284,9 @@ export default function ChannelsTab({ agentId }: { agentId: string }) {
                 <p className="mt-1 text-[11px] text-slate-500">
                   {payload.runtime === "openclaw"
                     ? createUsesQrConnect
-                      ? "Nora adds the channel through OpenClaw and starts the pairing flow."
-                      : "Nora writes the editable settings back through the underlying OpenClaw config API."
-                    : "Nora stores these adapter settings in its control-plane database."}
+                      ? "LPanel adds the channel through OpenClaw and starts the pairing flow."
+                      : "LPanel writes the editable settings back through the underlying OpenClaw config API."
+                    : "LPanel stores these adapter settings in its control-plane database."}
                 </p>
               </div>
               <button
@@ -2367,7 +2367,7 @@ export default function ChannelsTab({ agentId }: { agentId: string }) {
                   payload.availableTypes.find((entry) => entry.type === selectedType)
                     ?.hasComplexFields ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                      Some advanced runtime settings are not fully editable here yet. Nora will
+                      Some advanced runtime settings are not fully editable here yet. LPanel will
                       preserve the rest of the channel config when it saves.
                     </div>
                   ) : null}
@@ -2429,7 +2429,7 @@ export default function ChannelsTab({ agentId }: { agentId: string }) {
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                      This channel type does not expose additional editable Nora fields yet.
+                      This channel type does not expose additional editable LPanel fields yet.
                     </div>
                   )}
                 </>

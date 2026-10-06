@@ -23,7 +23,6 @@ import {
   X,
   Camera,
   Globe2,
-  Star,
 } from "lucide-react";
 import { useRouter } from "next/router";
 import { fetchWithAuth } from "../../lib/api";
@@ -31,7 +30,6 @@ import { LOCALE_LABELS, LOCALES, normalizeLocale, useI18n } from "../../lib/i18n
 import { useToast } from "../../components/Toast";
 import ActivationChecklist from "../../components/onboarding/ActivationChecklist";
 
-const NORA_REPO_URL = "https://github.com/solomon2773/nora";
 
 function formatPlanLabel(plan, { selfHosted = false } = {}) {
   const normalized = String(plan || "free")
@@ -83,7 +81,7 @@ export default function SettingsPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [languageSaving, setLanguageSaving] = useState(false);
   const [agentHubKeys, setAgentHubKeys] = useState([]);
-  const [agentHubKeyLabel, setAgentHubKeyLabel] = useState("Nora installation");
+  const [agentHubKeyLabel, setAgentHubKeyLabel] = useState("LPanel installation");
   const [agentHubKeyLoading, setAgentHubKeyLoading] = useState(false);
   const [agentHubKeyCreating, setAgentHubKeyCreating] = useState(false);
   const [generatedAgentHubKey, setGeneratedAgentHubKey] = useState(null);
@@ -526,7 +524,7 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-lg font-bold text-slate-900">Language</h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Choose the language used across Nora when you sign in.
+                Choose the language used across LPanel when you sign in.
               </p>
             </div>
           </div>
@@ -979,38 +977,6 @@ export default function SettingsPage() {
           </section>
         )}
 
-        <section className="overflow-hidden rounded-2xl border border-brand-cyan/20 bg-brand-ink p-6 shadow-sm">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="max-w-xl">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-cyan/10 text-brand-cyan">
-                  <Star size={20} aria-hidden="true" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-cyan">
-                    Open source
-                  </p>
-                  <h2 className="mt-1 text-lg font-bold text-brand-foreground">Support Nora</h2>
-                </div>
-              </div>
-              <p className="mt-4 text-sm leading-6 text-slate-300">
-                If Nora helps you operate your agent fleet, a GitHub star helps other operators find
-                the project and follow its releases.
-              </p>
-            </div>
-            <a
-              href={NORA_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-brand-gold px-5 py-3 text-sm font-black text-brand-ink transition-colors hover:bg-brand-gold/90 focus:outline-none focus:ring-2 focus:ring-brand-cyan focus:ring-offset-2 focus:ring-offset-brand-ink"
-              aria-label="Star Nora on GitHub (opens in a new tab)"
-            >
-              <Star size={16} aria-hidden="true" />
-              Star on GitHub
-              <ExternalLink size={14} aria-hidden="true" />
-            </a>
-          </div>
-        </section>
 
         {/* Danger Zone */}
         <section className="bg-red-50 border border-red-200 rounded-2xl p-6">
@@ -1028,7 +994,7 @@ export default function SettingsPage() {
             </p>
             <p className="text-sm text-red-700/80 mt-1">
               That dead control has been removed for now so operators do not click into an action
-              Nora cannot actually complete yet.
+              LPanel cannot actually complete yet.
             </p>
           </div>
         </section>

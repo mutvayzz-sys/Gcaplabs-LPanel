@@ -263,9 +263,9 @@ export default function OverviewTab({
           <div>
             <p className="text-sm font-bold text-blue-800">External runtime</p>
             <p className="text-xs text-blue-600">
-              This runtime was adopted by URL and runs outside Nora. Nora monitors and proxies it,
+              This runtime was adopted by URL and runs outside LPanel. LPanel monitors and proxies it,
               but lifecycle controls (start, stop, restart, redeploy) are unavailable. Use
-              “Deregister” in Settings to remove it from Nora — the runtime itself is not stopped.
+              “Deregister” in Settings to remove it from LPanel — the runtime itself is not stopped.
             </p>
           </div>
         </div>
@@ -381,7 +381,7 @@ export default function OverviewTab({
           <div>
             <p className="text-sm font-bold text-slate-800">Hermes API Server Active</p>
             <p className="text-[10px] text-slate-500">
-              {runtimeAddress} &bull; Hermes WebUI, logs, and terminal are available from Nora
+              {runtimeAddress} &bull; Hermes WebUI, logs, and terminal are available from LPanel
             </p>
           </div>
           <Radio size={14} className="ml-auto text-green-500 animate-pulse" />

@@ -173,7 +173,7 @@ export default function ClusterConfigForm({
             value={form.clusterName}
             onChange={(event) => onFieldChange("clusterName", event.target.value)}
             className={KUBERNETES_INPUT_CLASS}
-            placeholder="nora-dns-vjb9kjjz"
+            placeholder="lpanel-dns-vjb9kjjz"
           />
         </Field>
         <Field label="Credential mode">

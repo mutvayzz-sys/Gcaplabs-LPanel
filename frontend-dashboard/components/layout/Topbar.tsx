@@ -77,7 +77,7 @@ export default function Topbar({ onMenuClick }) {
   const initial = displayName.charAt(0).toUpperCase();
   const role = user?.role || "member";
   const pageMeta = PAGE_META[router.pathname] || {
-    title: "Nora",
+    title: "LPanel",
     subtitle: "Operate your agent fleet from one operator surface.",
   };
 

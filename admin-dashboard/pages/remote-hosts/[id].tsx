@@ -684,7 +684,7 @@ export default function RemoteHostDetailPage() {
           <DangerConfirmPanel
             title={t("Reset the pinned SSH host key?")}
             description={t(
-              "Nora will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.",
+              "LPanel will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.",
             )}
             expectedValues={[host.label, host.id]}
             value={confirmation}
@@ -700,7 +700,7 @@ export default function RemoteHostDetailPage() {
           <DangerConfirmPanel
             title={t("Delete this platform host?")}
             description={t(
-              "The registry row and its access grants will be removed. Active agents can block deletion; Nora will surface that conflict instead of silently orphaning them.",
+              "The registry row and its access grants will be removed. Active agents can block deletion; LPanel will surface that conflict instead of silently orphaning them.",
             )}
             expectedValues={[host.label, host.id]}
             value={confirmation}

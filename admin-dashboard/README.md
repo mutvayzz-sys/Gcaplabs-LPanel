@@ -1,6 +1,6 @@
 # Admin Dashboard
 
-Internal administration panel for Nora platform operators. Built with Next.js 16, React 19, and Tailwind CSS.
+Internal administration panel for LPanel platform operators. Built with Next.js 16, React 19, and Tailwind CSS.
 
 ## Overview
 
@@ -9,7 +9,7 @@ Runs on `/admin/*` behind nginx. Provides platform-wide visibility into users, a
 ## Features
 
 - **Ops Overview** — platform-wide metrics, queue health, recent audit activity, and DLQ awareness
-- **Control-plane Health** — admin view of the `nora doctor` self-check (database, queue, Kubernetes targets, secret posture, fleet health, gateway exposure) with auto-refresh and forced re-run
+- **Control-plane Health** — admin view of the self-check (database, queue, Kubernetes targets, secret posture, fleet health, gateway exposure) with auto-refresh and forced re-run
 - **Fleet Management** — global agent list, lifecycle actions, runtime metadata, telemetry samples, and live logs
 - **Queue Recovery** — dead-letter inspection and retry flows for failed deployment jobs
 - **User Management** — role changes, agent counts, and account deletion with agent cleanup

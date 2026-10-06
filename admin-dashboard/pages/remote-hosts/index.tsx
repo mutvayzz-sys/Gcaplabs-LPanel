@@ -227,7 +227,7 @@ export default function RemoteHostsRegistryPage() {
             <h2 className="text-sm font-black">{t("Experimental placement path")}</h2>
             <p className="mt-1 text-sm font-medium leading-relaxed text-amber-900/80">
               {t(
-                "Keep runtime ports on a private encrypted network. Test each host so Nora can verify Docker and pin the SSH host key before deployment.",
+                "Keep runtime ports on a private encrypted network. Test each host so LPanel can verify Docker and pin the SSH host key before deployment.",
               )}
             </p>
           </div>

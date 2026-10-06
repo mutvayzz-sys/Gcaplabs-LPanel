@@ -21,8 +21,8 @@ export const REMOTE_HOST_TRANSLATIONS = {
       "Gestiona destinos de Docker remoto de la plataforma e inspecciona la flota personal enmascarada sin exponer credenciales.",
     "Add platform host": "Añadir host de plataforma",
     "Experimental placement path": "Ruta de despliegue experimental",
-    "Keep runtime ports on a private encrypted network. Test each host so Nora can verify Docker and pin the SSH host key before deployment.":
-      "Mantén los puertos en una red privada cifrada. Prueba cada host para que Nora verifique Docker y fije la clave SSH antes del despliegue.",
+    "Keep runtime ports on a private encrypted network. Test each host so LPanel can verify Docker and pin the SSH host key before deployment.":
+      "Mantén los puertos en una red privada cifrada. Prueba cada host para que LPanel verifique Docker y fije la clave SSH antes del despliegue.",
     "Platform Hosts": "Hosts de plataforma",
     "Admin-managed targets": "Destinos gestionados por administradores",
     "Personal Hosts": "Hosts personales",
@@ -112,12 +112,12 @@ export const REMOTE_HOST_TRANSLATIONS = {
     "Reset SSH pin": "Restablecer clave SSH",
     "Delete host": "Eliminar host",
     "Reset the pinned SSH host key?": "¿Restablecer la clave SSH fijada?",
-    "Nora will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.":
-      "Nora rechazará operaciones futuras hasta que Probar conexión fije la nueva clave. Verifica primero el cambio del host por otro canal.",
+    "LPanel will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.":
+      "LPanel rechazará operaciones futuras hasta que Probar conexión fije la nueva clave. Verifica primero el cambio del host por otro canal.",
     "Confirm reset": "Confirmar restablecimiento",
     "Delete this platform host?": "¿Eliminar este host de plataforma?",
-    "The registry row and its access grants will be removed. Active agents can block deletion; Nora will surface that conflict instead of silently orphaning them.":
-      "Se eliminarán el registro y sus permisos. Los agentes activos pueden impedirlo; Nora mostrará el conflicto en lugar de dejarlos huérfanos.",
+    "The registry row and its access grants will be removed. Active agents can block deletion; LPanel will surface that conflict instead of silently orphaning them.":
+      "Se eliminarán el registro y sus permisos. Los agentes activos pueden impedirlo; LPanel mostrará el conflicto en lugar de dejarlos huérfanos.",
     "Confirm deletion": "Confirmar eliminación",
     "Platform host detail": "Detalle del host de plataforma",
     Overview: "Resumen",
@@ -162,8 +162,8 @@ export const REMOTE_HOST_TRANSLATIONS = {
       "Gérez les cibles Docker distantes de la plateforme et inspectez la flotte personnelle masquée sans exposer les identifiants.",
     "Add platform host": "Ajouter un hôte de plateforme",
     "Experimental placement path": "Chemin de placement expérimental",
-    "Keep runtime ports on a private encrypted network. Test each host so Nora can verify Docker and pin the SSH host key before deployment.":
-      "Conservez les ports sur un réseau privé chiffré. Testez chaque hôte afin que Nora vérifie Docker et épingle la clé SSH avant le déploiement.",
+    "Keep runtime ports on a private encrypted network. Test each host so LPanel can verify Docker and pin the SSH host key before deployment.":
+      "Conservez les ports sur un réseau privé chiffré. Testez chaque hôte afin que LPanel vérifie Docker et épingle la clé SSH avant le déploiement.",
     "Platform Hosts": "Hôtes de plateforme",
     "Admin-managed targets": "Cibles gérées par les administrateurs",
     "Personal Hosts": "Hôtes personnels",
@@ -254,12 +254,12 @@ export const REMOTE_HOST_TRANSLATIONS = {
     "Reset SSH pin": "Réinitialiser la clé SSH",
     "Delete host": "Supprimer l'hôte",
     "Reset the pinned SSH host key?": "Réinitialiser la clé SSH épinglée ?",
-    "Nora will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.":
-      "Nora refusera les opérations futures jusqu'à ce que Tester la connexion épingle la nouvelle clé. Vérifiez d'abord le changement d'hôte hors bande.",
+    "LPanel will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.":
+      "LPanel refusera les opérations futures jusqu'à ce que Tester la connexion épingle la nouvelle clé. Vérifiez d'abord le changement d'hôte hors bande.",
     "Confirm reset": "Confirmer la réinitialisation",
     "Delete this platform host?": "Supprimer cet hôte de plateforme ?",
-    "The registry row and its access grants will be removed. Active agents can block deletion; Nora will surface that conflict instead of silently orphaning them.":
-      "L'entrée du registre et ses autorisations seront supprimées. Les agents actifs peuvent bloquer la suppression ; Nora signalera le conflit au lieu de les rendre orphelins.",
+    "The registry row and its access grants will be removed. Active agents can block deletion; LPanel will surface that conflict instead of silently orphaning them.":
+      "L'entrée du registre et ses autorisations seront supprimées. Les agents actifs peuvent bloquer la suppression ; LPanel signalera le conflit au lieu de les rendre orphelins.",
     "Confirm deletion": "Confirmer la suppression",
     "Platform host detail": "Détails de l'hôte de plateforme",
     Overview: "Vue d'ensemble",
@@ -304,8 +304,8 @@ export const REMOTE_HOST_TRANSLATIONS = {
       "管理平台拥有的远程 Docker 目标，并在不暴露操作员凭据的情况下检查已屏蔽的个人主机队列。",
     "Add platform host": "添加平台主机",
     "Experimental placement path": "实验性部署路径",
-    "Keep runtime ports on a private encrypted network. Test each host so Nora can verify Docker and pin the SSH host key before deployment.":
-      "将运行时端口保留在加密的专用网络中。部署前测试每台主机，以便 Nora 验证 Docker 并固定 SSH 主机密钥。",
+    "Keep runtime ports on a private encrypted network. Test each host so LPanel can verify Docker and pin the SSH host key before deployment.":
+      "将运行时端口保留在加密的专用网络中。部署前测试每台主机，以便 LPanel 验证 Docker 并固定 SSH 主机密钥。",
     "Platform Hosts": "平台主机",
     "Admin-managed targets": "管理员管理的目标",
     "Personal Hosts": "个人主机",
@@ -390,12 +390,12 @@ export const REMOTE_HOST_TRANSLATIONS = {
     "Reset SSH pin": "重置 SSH 固定密钥",
     "Delete host": "删除主机",
     "Reset the pinned SSH host key?": "重置已固定的 SSH 主机密钥？",
-    "Nora will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.":
-      "在“测试连接”成功并固定替换密钥之前，Nora 将拒绝后续远程 Docker 操作。请先通过带外方式验证主机更改。",
+    "LPanel will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.":
+      "在“测试连接”成功并固定替换密钥之前，LPanel 将拒绝后续远程 Docker 操作。请先通过带外方式验证主机更改。",
     "Confirm reset": "确认重置",
     "Delete this platform host?": "删除此平台主机？",
-    "The registry row and its access grants will be removed. Active agents can block deletion; Nora will surface that conflict instead of silently orphaning them.":
-      "注册记录及其访问授权将被删除。活动代理可能阻止删除；Nora 会显示冲突，而不会让它们成为孤立项。",
+    "The registry row and its access grants will be removed. Active agents can block deletion; LPanel will surface that conflict instead of silently orphaning them.":
+      "注册记录及其访问授权将被删除。活动代理可能阻止删除；LPanel 会显示冲突，而不会让它们成为孤立项。",
     "Confirm deletion": "确认删除",
     "Platform host detail": "平台主机详情",
     Overview: "概览",
@@ -440,8 +440,8 @@ export const REMOTE_HOST_TRANSLATIONS = {
       "管理平台擁有的遠端 Docker 目標，並在不公開操作員憑證的情況下檢查已遮蔽的個人主機群。",
     "Add platform host": "新增平台主機",
     "Experimental placement path": "實驗性部署路徑",
-    "Keep runtime ports on a private encrypted network. Test each host so Nora can verify Docker and pin the SSH host key before deployment.":
-      "將執行階段連接埠保留在加密的私人網路中。部署前測試每台主機，讓 Nora 驗證 Docker 並固定 SSH 主機金鑰。",
+    "Keep runtime ports on a private encrypted network. Test each host so LPanel can verify Docker and pin the SSH host key before deployment.":
+      "將執行階段連接埠保留在加密的私人網路中。部署前測試每台主機，讓 LPanel 驗證 Docker 並固定 SSH 主機金鑰。",
     "Platform Hosts": "平台主機",
     "Admin-managed targets": "管理員管理的目標",
     "Personal Hosts": "個人主機",
@@ -526,12 +526,12 @@ export const REMOTE_HOST_TRANSLATIONS = {
     "Reset SSH pin": "重設 SSH 固定金鑰",
     "Delete host": "刪除主機",
     "Reset the pinned SSH host key?": "重設已固定的 SSH 主機金鑰？",
-    "Nora will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.":
-      "在「測試連線」成功並固定替換金鑰之前，Nora 將拒絕後續遠端 Docker 操作。請先透過頻外方式驗證主機變更。",
+    "LPanel will refuse future Remote Docker operations until Test connection succeeds and pins the replacement key. Verify the host change out of band first.":
+      "在「測試連線」成功並固定替換金鑰之前，LPanel 將拒絕後續遠端 Docker 操作。請先透過頻外方式驗證主機變更。",
     "Confirm reset": "確認重設",
     "Delete this platform host?": "刪除此平台主機？",
-    "The registry row and its access grants will be removed. Active agents can block deletion; Nora will surface that conflict instead of silently orphaning them.":
-      "登錄記錄及其存取授權將被刪除。作用中的代理可能阻止刪除；Nora 會顯示衝突，而不會讓它們成為孤立項目。",
+    "The registry row and its access grants will be removed. Active agents can block deletion; LPanel will surface that conflict instead of silently orphaning them.":
+      "登錄記錄及其存取授權將被刪除。作用中的代理可能阻止刪除；LPanel 會顯示衝突，而不會讓它們成為孤立項目。",
     "Confirm deletion": "確認刪除",
     "Platform host detail": "平台主機詳細資料",
     Overview: "概覽",

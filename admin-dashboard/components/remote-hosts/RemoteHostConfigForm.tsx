@@ -72,7 +72,7 @@ export default function RemoteHostConfigForm({
   if (!credentialsAllowed) {
     return (
       <div className="rounded-[2rem] border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-900">
-        Credential configuration is hidden until Nora verifies self-hosted mode.
+        Credential configuration is hidden until LPanel verifies self-hosted mode.
       </div>
     );
   }
@@ -92,7 +92,7 @@ export default function RemoteHostConfigForm({
           <div>
             <h2 className="text-lg font-black">Platform host configuration</h2>
             <p className="mt-1 max-w-2xl text-sm font-medium text-brand-foreground/65">
-              Nora stores SSH credentials encrypted. Browser forms never receive stored secret
+              LPanel stores SSH credentials encrypted. Browser forms never receive stored secret
               values.
             </p>
           </div>
@@ -188,7 +188,7 @@ export default function RemoteHostConfigForm({
                 required
                 autoComplete="username"
                 className={REMOTE_HOST_INPUT_CLASS}
-                placeholder="nora"
+                placeholder="lpanel"
               />
             </Field>
             <Field
@@ -319,7 +319,7 @@ export default function RemoteHostConfigForm({
           <p>
             Saving endpoint or credential changes invalidates the previous readiness result. Run
             Test connection again before deployment; credential rotation keeps the existing SSH pin,
-            while changing the SSH host or port requires Nora to pin the new endpoint.
+            while changing the SSH host or port requires LPanel to pin the new endpoint.
           </p>
         </div>
       </div>

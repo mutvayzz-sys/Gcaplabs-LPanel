@@ -104,8 +104,8 @@ export default function ActivationChecklist({
         key: "account",
         title: "Operator account ready",
         desc: demoAvailable
-          ? "Your Nora workspace is ready. Prove the operator loop with the zero-key local Docker demo or connect a real provider."
-          : "Your Nora workspace is ready. Connect a model provider, then deploy to a target enabled by your operator.",
+          ? "Your LPanel workspace is ready. Prove the operator loop with the zero-key local Docker demo or connect a real provider."
+          : "Your LPanel workspace is ready. Connect a model provider, then deploy to a target enabled by your operator.",
         href: demoAvailable ? "/app/getting-started#demo-path" : "/app/settings",
         cta: "Choose First Proof",
         icon: ShieldCheck,
@@ -119,7 +119,7 @@ export default function ActivationChecklist({
             ? "Enable the demo or add a provider"
             : "Add a model provider",
         desc: hasProvider
-          ? `${providerCount} provider${providerCount === 1 ? "" : "s"} configured. Nora can sync credentials to your agents.`
+          ? `${providerCount} provider${providerCount === 1 ? "" : "s"} configured. LPanel can sync credentials to your agents.`
           : demoAvailable
             ? "Use the built-in deterministic demo for a zero-key first proof, or save a provider key in Settings for a live model."
             : "Save a provider key in Settings before deploying to one of this installation's enabled targets.",
@@ -137,8 +137,8 @@ export default function ActivationChecklist({
         title: hasAgent ? "First agent deployed" : "Deploy your first OpenClaw agent",
         desc: hasAgent
           ? hasValidatedRuntime
-            ? `${agents.length} agent${agents.length === 1 ? " is" : "s are"} now in Nora, and one live runtime has passed chat validation.`
-            : `${agents.length} agent${agents.length === 1 ? " is" : "s are"} now in Nora. The next move is to validate one live runtime end-to-end.`
+            ? `${agents.length} agent${agents.length === 1 ? " is" : "s are"} now in LPanel, and one live runtime has passed chat validation.`
+            : `${agents.length} agent${agents.length === 1 ? " is" : "s are"} now in LPanel. The next move is to validate one live runtime end-to-end.`
           : "Open Deploy and choose one enabled backend for the clearest first-run launch flow.",
         href: "/app/deploy",
         cta: hasAgent ? "Deploy Another Agent" : "Deploy First Agent",
@@ -192,7 +192,7 @@ export default function ActivationChecklist({
             </h2>
             <p className="text-sm text-slate-500 mt-2 max-w-2xl">
               {subtitle ||
-                "The fastest self-hosted launch path is simple: connect one provider, deploy one agent, then confirm the runtime from Nora itself."}
+                "The fastest self-hosted launch path is simple: connect one provider, deploy one agent, then confirm the runtime from LPanel itself."}
             </p>
           </div>
 
@@ -290,7 +290,7 @@ export default function ActivationChecklist({
                   <div className="flex items-center justify-between gap-3 pl-0 sm:pl-[60px]">
                     <div className="text-xs text-slate-500 font-medium">
                       {step.key === "validate"
-                        ? "Successful runtime checks happen from inside Nora."
+                        ? "Successful runtime checks happen from inside LPanel."
                         : step.key === "deploy"
                           ? "Choose one enabled backend, then validate a single runtime end to end."
                           : ""}

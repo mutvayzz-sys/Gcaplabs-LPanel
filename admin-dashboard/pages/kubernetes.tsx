@@ -130,7 +130,7 @@ export default function KubernetesRegistryPage() {
             value={formatCount(clusters.length)}
             icon={Boxes}
             tone="blue"
-            caption="All Nora execution targets"
+            caption="All LPanel execution targets"
           />
           <MetricCard
             label="Available"

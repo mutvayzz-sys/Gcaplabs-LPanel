@@ -646,7 +646,7 @@ export default function IntegrationCard({
                               Reminder Cron
                             </div>
                             <div className="mt-1 text-[10px] text-slate-500">
-                              Nora can optionally create a normal scheduled agent turn seeded from
+                              LPanel can optionally create a normal scheduled agent turn seeded from
                               this mailbox connection.
                             </div>
                           </div>

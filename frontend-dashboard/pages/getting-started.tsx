@@ -43,7 +43,7 @@ function TryDemoButton({
       if (!activationRes.ok || !agent.id) {
         throw new Error(
           agent.error ||
-            "Could not start the local Docker demo. Make sure Docker is running and Nora can access its socket.",
+            "Could not start the local Docker demo. Make sure Docker is running and LPanel can access its socket.",
         );
       }
       window.location.assign(`/app/agents/${agent.id}`);
@@ -86,7 +86,7 @@ function TryDemoButton({
       ) : null}
       {availability === "error" ? (
         <p className="max-w-md text-xs font-semibold leading-5 text-red-600" role="alert">
-          Nora could not confirm whether the local Docker demo is available. Refresh this page or
+          LPanel could not confirm whether the local Docker demo is available. Refresh this page or
           start with a provider in Settings.
         </p>
       ) : null}
@@ -103,7 +103,7 @@ const bestFit = [
   {
     icon: Shield,
     title: "Internal AI platform teams",
-    desc: "Use Nora as the operator layer around self-hosted OpenClaw infrastructure instead of building internal glue from scratch.",
+    desc: "Use LPanel as the operator layer around self-hosted OpenClaw infrastructure instead of building internal glue from scratch.",
   },
   {
     icon: Bot,
@@ -124,7 +124,7 @@ export default function GettingStartedPage() {
   const launchSignals =
     demoAvailability === "loading"
       ? [
-          "Nora checks the running deployment before presenting an activation path.",
+          "LPanel checks the running deployment before presenting an activation path.",
           "Enabled targets come from the control plane rather than frontend build settings.",
           "Provider and runtime choices remain under the operator's control.",
           "Chat, logs, and terminal stay reachable from the same operator surface.",
@@ -137,7 +137,7 @@ export default function GettingStartedPage() {
             "Chat, logs, and terminal are all reachable from the same operator surface.",
           ]
         : [
-            "Nora shows only activation paths supported by this deployment.",
+            "LPanel shows only activation paths supported by this deployment.",
             "Local Docker installs can use the deterministic zero-key demo.",
             "Kubernetes-only installs start with a configured model provider.",
             "Chat, logs, and terminal stay reachable from the same operator surface.",
@@ -178,14 +178,14 @@ export default function GettingStartedPage() {
               Getting started
             </p>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight mb-4">
-              Bring Nora online like a production operator platform
+              Bring LPanel online like a production operator platform
             </h1>
             <p className="text-slate-300 leading-relaxed max-w-2xl">
               {demoAvailability === "loading"
-                ? "Nora is checking the enabled deployment targets before recommending the fastest supported first proof."
+                ? "LPanel is checking the enabled deployment targets before recommending the fastest supported first proof."
                 : demoAvailable
-                  ? "Prove Nora's operator loop before connecting a paid model: deploy the deterministic demo agent, validate the runtime, then add a real provider and workload when you are ready."
-                  : "Validate Nora through the targets enabled for this deployment. The zero-key demo is available on local Docker installs; other deployments start by connecting a model provider."}
+                  ? "Prove LPanel's operator loop before connecting a paid model: deploy the deterministic demo agent, validate the runtime, then add a real provider and workload when you are ready."
+                  : "Validate LPanel through the targets enabled for this deployment. The zero-key demo is available on local Docker installs; other deployments start by connecting a model provider."}
             </p>
 
             <div className="grid sm:grid-cols-2 gap-4 mt-8">
@@ -221,7 +221,7 @@ export default function GettingStartedPage() {
                   </p>
                   <p className="text-sm text-slate-500 mt-1">
                     {demoAvailable
-                      ? "Nora verifies local Docker, enables its deterministic demo provider, and deploys one demo agent. No external account or usage bill is required."
+                      ? "LPanel verifies local Docker, enables its deterministic demo provider, and deploys one demo agent. No external account or usage bill is required."
                       : "Open Settings and connect a model provider before deploying to one of the targets enabled by your operator."}
                   </p>
                 </div>
@@ -238,7 +238,7 @@ export default function GettingStartedPage() {
                   </p>
                   <p className="text-sm text-slate-500 mt-1">
                     {demoAvailable
-                      ? "Open the agent page and prove chat, logs, terminal access, and runtime health from inside Nora."
+                      ? "Open the agent page and prove chat, logs, terminal access, and runtime health from inside LPanel."
                       : "Use Deploy to select a configured Kubernetes, remote-host, or other operator-approved target."}
                   </p>
                 </div>
@@ -254,7 +254,7 @@ export default function GettingStartedPage() {
                   <p className="text-sm text-slate-500 mt-1">
                     {demoAvailable
                       ? "Add a provider in Settings, then deploy OpenClaw or Hermes to a GA Docker or Kubernetes target for a live workload."
-                      : "Open the agent page and prove chat, logs, terminal access, and runtime health from inside Nora."}
+                      : "Open the agent page and prove chat, logs, terminal access, and runtime health from inside LPanel."}
                   </p>
                 </div>
               </div>
@@ -279,7 +279,7 @@ export default function GettingStartedPage() {
               </a>
             </div>
             <p className="text-xs text-slate-400 mt-3">
-              The demo model is served by your Nora control plane on local Docker installs. It
+              The demo model is served by your LPanel control plane on local Docker installs. It
               proves product flow, not model quality; swap in a real provider whenever you are
               ready.
             </p>

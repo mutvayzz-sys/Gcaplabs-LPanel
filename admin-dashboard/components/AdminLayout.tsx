@@ -172,15 +172,6 @@ export default function AdminLayout({ children }) {
             >
               {t("Runtime operations")}
             </a>
-            <a
-              href="https://github.com/solomon2773/nora"
-              target="_blank"
-              rel="noreferrer"
-              className="hm-attribution mb-3 block"
-              title={t("Powered by Nora")}
-            >
-              {t("Powered by Nora")}
-            </a>
             <LanguageSwitcher className="mb-3 w-full justify-center" />
             <button
               onClick={handleLogout}

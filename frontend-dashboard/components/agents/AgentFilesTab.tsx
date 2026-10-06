@@ -379,7 +379,7 @@ export default function AgentFilesTab({ agentId, agentStatus, agentContainerId }
             File access is available once the runtime is live.
           </h3>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">
-            Nora reads the actual runtime filesystem for this tab. Start the agent, then return here
+            LPanel reads the actual runtime filesystem for this tab. Start the agent, then return here
             to browse the workspace, inspect curated system paths, export content, or edit files
             inside the writable workspace.
           </p>
@@ -397,7 +397,7 @@ export default function AgentFilesTab({ agentId, agentStatus, agentContainerId }
             Waiting for the runtime container.
           </h3>
           <p className="mt-2 text-sm leading-relaxed text-amber-900/80">
-            The agent is marked live, but Nora has not received a container id yet. Refresh after
+            The agent is marked live, but LPanel has not received a container id yet. Refresh after
             deployment finishes, or redeploy if this state persists.
           </p>
         </div>
@@ -686,7 +686,7 @@ export default function AgentFilesTab({ agentId, agentStatus, agentContainerId }
                   Use this panel for the actual file contents.
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                  Nora reads the live runtime filesystem rather than a synthetic database view.
+                  LPanel reads the live runtime filesystem rather than a synthetic database view.
                   Workspace files can be edited in place, and dedicated config roots can expose a
                   single live file without opening broader runtime paths for mutation. Binary files
                   and read-only roots stay download only.
@@ -743,7 +743,7 @@ export default function AgentFilesTab({ agentId, agentStatus, agentContainerId }
               <div className="max-w-md">
                 <p className="text-sm font-bold text-slate-900">Binary file loaded.</p>
                 <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                  Nora detected binary or non-UTF-8 content, so this path stays preview-free here.
+                  LPanel detected binary or non-UTF-8 content, so this path stays preview-free here.
                   Download it from the file list or export the current folder.
                 </p>
               </div>

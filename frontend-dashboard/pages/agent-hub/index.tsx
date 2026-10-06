@@ -298,7 +298,7 @@ export default function AgentHub() {
           <div className="relative z-10 flex flex-col gap-4 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-widest leading-none mb-2">
               <Sparkles size={12} className="fill-current" />
-              Nora Agent Hub
+              LPanel Agent Hub
             </div>
             <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white tracking-tight leading-none">
               Install presets, browse community templates, and track your own shared agents.
@@ -349,7 +349,7 @@ export default function AgentHub() {
                   Share from any agent detail page.
                 </p>
                 <p className="mt-1 text-sm text-blue-700/80">
-                  Nora exports template files only, strips wiring and secrets, and applies the admin
+                  LPanel exports template files only, strips wiring and secrets, and applies the admin
                   default share target.
                 </p>
               </div>

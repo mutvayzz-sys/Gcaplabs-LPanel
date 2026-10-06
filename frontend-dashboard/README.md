@@ -1,6 +1,6 @@
 # Frontend Dashboard
 
-The main application dashboard for Nora. Built with Next.js 16, React 19, and Tailwind CSS.
+The main application dashboard for LPanel. Built with Next.js 16, React 19, and Tailwind CSS.
 
 ## Overview
 

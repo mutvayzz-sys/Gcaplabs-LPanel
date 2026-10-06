@@ -62,7 +62,7 @@ export default function SettingsTab({
         title={isExternal ? "Deregister runtime" : "Delete Agent"}
         message={
           isExternal
-            ? "Remove this external runtime from Nora? Nora stops monitoring and proxying it, but the runtime itself keeps running — it is not stopped or destroyed."
+            ? "Remove this external runtime from LPanel? LPanel stops monitoring and proxying it, but the runtime itself keeps running — it is not stopped or destroyed."
             : "Are you sure you want to permanently delete this agent? This will destroy the container and all data. This action cannot be undone."
         }
         confirmLabel={isExternal ? "Deregister" : "Delete Agent"}
@@ -177,8 +177,8 @@ export default function SettingsTab({
       <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <h3 className="text-sm font-bold text-slate-700">Migration & Backup</h3>
         <p className="text-sm text-slate-500 leading-relaxed">
-          Export this Nora-managed agent as a migration bundle when you need to recreate it on
-          another Nora control plane. Use the Files tab when you need live access to the runtime
+          Export this LPanel-managed agent as a migration bundle when you need to recreate it on
+          another LPanel control plane. Use the Files tab when you need live access to the runtime
           filesystem itself.
         </p>
         <button
@@ -192,7 +192,7 @@ export default function SettingsTab({
           ) : (
             <Download size={14} />
           )}
-          Export Nora Bundle
+          Export LPanel Bundle
         </button>
       </section>
 
@@ -248,7 +248,7 @@ export default function SettingsTab({
           <h3 className="text-sm font-bold text-red-700">Danger Zone</h3>
           <p className="text-xs text-red-600">
             {isExternal
-              ? "Deregistering removes this external runtime from Nora (monitoring, proxy access, and its record). The runtime itself keeps running — Nora does not stop or destroy it."
+              ? "Deregistering removes this external runtime from LPanel (monitoring, proxy access, and its record). The runtime itself keeps running — LPanel does not stop or destroy it."
               : "Deleting this agent will permanently destroy the container and all associated data including integrations, channels, and message history."}
           </p>
           <button

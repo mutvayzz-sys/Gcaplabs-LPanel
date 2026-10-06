@@ -192,7 +192,7 @@ export default function Monitoring() {
                 Fleet Monitoring
               </h1>
               <p className="text-slate-400 font-medium text-sm mt-1">
-                Live status for owned and workspace-shared Nora agents. Auto-refreshes every 30s.
+                Live status for owned and workspace-shared LPanel agents. Auto-refreshes every 30s.
               </p>
             </div>
           </div>

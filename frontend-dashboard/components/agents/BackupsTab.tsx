@@ -91,7 +91,7 @@ export default function BackupsTab({ agentId }) {
       }
       const disposition = res.headers.get("content-disposition") || "";
       const match = disposition.match(/filename="([^"]+)"/i);
-      const filename = match?.[1] || `${backup.name || "nora-backup"}.tgz`;
+      const filename = match?.[1] || `${backup.name || "lpanel-backup"}.tgz`;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

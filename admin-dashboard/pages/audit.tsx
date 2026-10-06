@@ -192,7 +192,7 @@ function buildPageItems(currentPage, totalPages) {
   return items;
 }
 
-function extractFilename(contentDisposition, fallback = "nora-audit-export.csv") {
+function extractFilename(contentDisposition, fallback = "lpanel-audit-export.csv") {
   if (!contentDisposition) return fallback;
 
   const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i);

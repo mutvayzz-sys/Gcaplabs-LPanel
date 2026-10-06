@@ -75,7 +75,7 @@ export default function NewKubernetesClusterPage() {
             </div>
 
             <p className="max-w-3xl text-sm font-medium leading-relaxed text-slate-500">
-              Create a dedicated execution target for Nora, then open its detail page to test
+              Create a dedicated execution target for LPanel, then open its detail page to test
               connectivity, adjust exposure settings, and manage ingress policy for OpenClaw or
               Hermes runtimes.
             </p>
@@ -85,7 +85,7 @@ export default function NewKubernetesClusterPage() {
                 Fast path to registration
               </p>
               <p className="mt-2 text-sm leading-relaxed text-red-700/80">
-                Start by naming the target, pointing Nora at the right kubeconfig or context, and
+                Start by naming the target, pointing LPanel at the right kubeconfig or context, and
                 choosing the namespaces where runtimes should land. After save, use the cluster
                 detail page to run a live connectivity test and confirm NetworkPolicy support.
               </p>
@@ -98,7 +98,7 @@ export default function NewKubernetesClusterPage() {
               <div>
                 <p className="text-sm font-bold text-white">What this page creates</p>
                 <p className="mt-0.5 text-xs text-slate-400">
-                  A Nora-managed execution target, not a new Kubernetes cluster.
+                  A LPanel-managed execution target, not a new Kubernetes cluster.
                 </p>
               </div>
             </div>
@@ -106,7 +106,7 @@ export default function NewKubernetesClusterPage() {
             <div className="space-y-3 text-sm text-slate-300">
               <div className="flex items-start gap-2">
                 <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-400" />
-                <span>Stores the cluster profile Nora will use for future deployments.</span>
+                <span>Stores the cluster profile LPanel will use for future deployments.</span>
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-400" />
@@ -126,7 +126,7 @@ export default function NewKubernetesClusterPage() {
 
         <ClusterConfigForm
           title="Cluster Registration"
-          description="Register a Kubernetes execution target for Nora control-plane use."
+          description="Register a Kubernetes execution target for LPanel control-plane use."
           submitLabel="Register"
           form={form}
           editing={false}

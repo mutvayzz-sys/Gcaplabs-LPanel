@@ -452,7 +452,7 @@ export default function HermesSkillsSelectPage() {
               </h1>
               <p className="max-w-3xl text-sm leading-6 text-slate-600">
                 Pick from your instance&apos;s Skills Library or search the Hermes Skills Hub, then
-                attach only the skills you want saved on this Hermes agent at deploy time. Nora
+                attach only the skills you want saved on this Hermes agent at deploy time. LPanel
                 installs them once the runtime is ready.
               </p>
             </div>
@@ -492,7 +492,7 @@ export default function HermesSkillsSelectPage() {
               {library.length} saved
             </div>
             <p className="text-sm text-slate-600">
-              Skills curated for this Nora instance. Add one to this deploy&apos;s selection, or
+              Skills curated for this LPanel instance. Add one to this deploy&apos;s selection, or
               remove it from the shared library.
             </p>
             {libraryError ? (

@@ -393,12 +393,12 @@ export default function RemoteHostsPage() {
               <Server size={24} />
             </div>
             <h1 className="mt-5 text-2xl font-black text-brand-ink">
-              {hosted ? "Remote Hosts require self-hosted Nora" : "Remote Hosts are unavailable"}
+              {hosted ? "Remote Hosts require self-hosted LPanel" : "Remote Hosts are unavailable"}
             </h1>
             <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
               {hosted
-                ? "Hosted mode does not accept or use customer SSH credentials. Run Nora on infrastructure you control to register a Remote Docker host."
-                : "Nora could not verify this installation's platform mode. Restore the public platform configuration endpoint before managing SSH credentials."}
+                ? "Hosted mode does not accept or use customer SSH credentials. Run LPanel on infrastructure you control to register a Remote Docker host."
+                : "LPanel could not verify this installation's platform mode. Restore the public platform configuration endpoint before managing SSH credentials."}
             </p>
             <a
               href="https://docs.norafleet.ai/configuration/provisioner-backends/remote-docker"
@@ -507,7 +507,7 @@ export default function RemoteHostsPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Remote Hosts</h1>
             <p className="text-sm text-slate-500">
-              Register a Linux Docker server, VPS, or cloud VM so Nora can deploy agents to it over
+              Register a Linux Docker server, VPS, or cloud VM so LPanel can deploy agents to it over
               SSH. Credentials are encrypted at rest.
             </p>
           </div>
@@ -520,7 +520,7 @@ export default function RemoteHostsPage() {
               <h2 className="text-sm font-black">Private network and deploy validation required</h2>
               <p className="mt-1 text-sm font-medium leading-relaxed text-amber-900/85">
                 Remote runtime ports use plain HTTP/WebSocket and bind to <code>0.0.0.0</code> on
-                the selected host. Restrict the published port range to Nora over a private
+                the selected host. Restrict the published port range to LPanel over a private
                 encrypted network. <strong>Test</strong> only checks that backend-api can run{" "}
                 <code>docker version</code> over SSH; its result does not expire and does not verify
                 the provisioner worker, gateway routing, readiness, lifecycle, or backups.
@@ -819,10 +819,10 @@ export default function RemoteHostsPage() {
                           </h3>
                           <p className="mt-1 text-sm font-medium leading-relaxed text-red-900/85">
                             Use this only after independently confirming that this machine was
-                            intentionally rebuilt or its SSH host key was rotated. Nora will remove
+                            intentionally rebuilt or its SSH host key was rotated. LPanel will remove
                             the pinned key and previous Test result, but will not change stored SSH
                             credentials. Deployments and active use stay blocked until you run Test
-                            successfully and Nora pins the new key.
+                            successfully and LPanel pins the new key.
                           </p>
                           <label className="mt-3 block max-w-xl">
                             <span className="block text-xs font-bold text-red-900">
