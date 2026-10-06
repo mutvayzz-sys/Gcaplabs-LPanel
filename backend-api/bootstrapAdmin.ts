@@ -39,9 +39,9 @@ function allowsFirstAdminSignupClaim(platformMode = process.env.PLATFORM_MODE) {
 }
 
 /**
- * Whether public account registration is enabled. Unset/empty defaults to
- * enabled; any other value must be an explicit truthy token, so a typo fails
- * closed. Shared by the auth routes (signup/OAuth guards, bootstrap-status)
+ * Whether public account registration is enabled. Fails closed: unset/empty
+ * means disabled (Headmaster change; upstream treated unset as enabled), and
+ * only an explicit truthy token enables it, so a typo also stays closed. Shared by the auth routes (signup/OAuth guards, bootstrap-status)
  * and the boot-time first-admin seed diagnostics.
  *
  * @param {string} [value] - Raw SIGNUP_ENABLED value (defaults to the env).
@@ -51,7 +51,7 @@ function isSignupEnabled(value = process.env.SIGNUP_ENABLED) {
   const normalized = String(value ?? "")
     .trim()
     .toLowerCase();
-  if (!normalized) return true;
+  if (!normalized) return false;
   return ["true", "1", "yes", "on"].includes(normalized);
 }
 
