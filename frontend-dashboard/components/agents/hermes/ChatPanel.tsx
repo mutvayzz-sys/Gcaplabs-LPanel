@@ -78,7 +78,7 @@ export default function HermesChatPanel({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.error || "Hermes chat request failed");
+        throw new Error(data.error || "Headmaster chat request failed");
       }
 
       setSessionId(data.sessionId || "");
@@ -99,7 +99,7 @@ export default function HermesChatPanel({
     } catch (nextError) {
       setMessages((current) => current.filter((message) => message.id !== nextUserMessage.id));
       setDraft(content);
-      setError(nextError.message || "Hermes chat request failed");
+      setError(nextError.message || "Headmaster chat request failed");
     } finally {
       setSending(false);
     }
@@ -124,10 +124,10 @@ export default function HermesChatPanel({
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
-            Hermes Chat
+            Headmaster Chat
           </p>
           <p className="mt-1 text-sm font-bold text-slate-900">
-            Direct conversation against Hermes&apos;s OpenAI-compatible runtime API.
+            Direct conversation against the Headmaster runtime&apos;s OpenAI-compatible API.
           </p>
           <p className="mt-1 text-xs text-slate-500">
             {defaultModel ? `Default model: ${defaultModel}` : "No model reported yet"}
@@ -183,8 +183,8 @@ export default function HermesChatPanel({
               <p className="text-sm font-bold text-slate-900">Conversation</p>
               <p className="mt-1 text-xs text-slate-500">
                 {runtimeReady
-                  ? "Session-aware chat against the running Hermes API."
-                  : runtimeInfo?.health?.error || "Waiting for Hermes to finish starting."}
+                  ? "Session-aware chat against the running Headmaster API."
+                  : runtimeInfo?.health?.error || "Waiting for Headmaster to finish starting."}
               </p>
             </div>
             <button
@@ -206,7 +206,7 @@ export default function HermesChatPanel({
                 <Bot size={26} className="text-slate-300" />
                 <p className="mt-3 text-sm font-bold text-slate-700">No active conversation yet</p>
                 <p className="mt-1 max-w-sm text-xs text-slate-500">
-                  Send a prompt once the Hermes runtime reports healthy status.
+                  Send a prompt once the Headmaster runtime reports healthy status.
                 </p>
               </div>
             ) : (
@@ -230,7 +230,7 @@ export default function HermesChatPanel({
                             isAssistant ? "text-blue-600" : "text-blue-100"
                           }`}
                         >
-                          {isAssistant ? "Hermes" : "You"}
+                          {isAssistant ? "Headmaster" : "You"}
                         </span>
                         <span
                           className={`text-[10px] ${
@@ -261,7 +261,7 @@ export default function HermesChatPanel({
               <div className="flex justify-start">
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-500 shadow-sm">
                   <Loader2 size={12} className="animate-spin text-blue-500" />
-                  Hermes is responding
+                  Headmaster is responding
                 </div>
               </div>
             ) : null}
@@ -275,8 +275,8 @@ export default function HermesChatPanel({
                 onKeyDown={handleComposerKeyDown}
                 placeholder={
                   runtimeReady
-                    ? "Ask Hermes to inspect the workspace, summarize logs, or draft a response..."
-                    : "Wait for the Hermes runtime to become ready before sending a prompt."
+                    ? "Ask Headmaster to inspect the workspace, summarize logs, or draft a response..."
+                    : "Wait for the Headmaster runtime to become ready before sending a prompt."
                 }
                 rows={4}
                 disabled={!runtimeReady || sending}
@@ -284,7 +284,7 @@ export default function HermesChatPanel({
               />
               <div className="mt-3 flex items-center justify-between gap-3">
                 <div className="text-xs text-slate-500">
-                  {sessionId ? `Session ${sessionId}` : "New Hermes session"}
+                  {sessionId ? `Session ${sessionId}` : "New Headmaster session"}
                 </div>
                 <button
                   onClick={handleSend}
@@ -340,11 +340,11 @@ export default function HermesChatPanel({
               <p className="text-sm font-bold text-slate-900">Tips</p>
             </div>
             <div className="space-y-3 p-4 text-xs text-slate-600">
-              <p>Use the Status tab first if Hermes is still starting or models are missing.</p>
+              <p>Use the Status tab first if Headmaster is still starting or models are missing.</p>
               <p>
-                Integration and channel changes can restart Hermes, so refresh this tab after edits.
+                Integration and channel changes can restart Headmaster, so refresh this tab after edits.
               </p>
-              <p>Conversation state is carried with the Hermes session id until you reset it.</p>
+              <p>Conversation state is carried with the Headmaster session id until you reset it.</p>
             </div>
           </section>
         </aside>

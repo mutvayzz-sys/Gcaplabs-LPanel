@@ -35,7 +35,7 @@ export default function SeoHead({
   description,
   path,
   imagePath = DEFAULT_IMAGE_PATH,
-  imageAlt = "Nora self-hosted AI agent control plane",
+  imageAlt = "Headmaster control panel",
   noIndex = false,
   structuredData,
 }: SeoHeadProps) {
@@ -69,7 +69,7 @@ export default function SeoHead({
       <link rel="alternate" hrefLang="x-default" href={absoluteUrl(path)} key="alternate-default" />
 
       <meta property="og:type" content="website" key="og:type" />
-      <meta property="og:site_name" content="Nora" key="og:site_name" />
+      <meta property="og:site_name" content="Headmaster" key="og:site_name" />
       <meta property="og:title" content={title} key="og:title" />
       <meta property="og:description" content={description} key="og:description" />
       <meta property="og:url" content={canonicalUrl} key="og:url" />

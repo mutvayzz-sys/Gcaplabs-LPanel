@@ -68,7 +68,7 @@ function RuleCard({
   onTogglePort: (port: number) => void;
   onRemove: () => void;
 }) {
-  const familyLabel = runtimeFamily === "openclaw" ? "OpenClaw" : "Hermes";
+  const familyLabel = runtimeFamily === "openclaw" ? "OpenClaw" : "Headmaster";
 
   return (
     <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
@@ -138,7 +138,7 @@ function RuleCard({
                       : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  {family === "openclaw" ? "OpenClaw" : "Hermes"}
+                  {family === "openclaw" ? "OpenClaw" : "Headmaster"}
                 </button>
               );
             })}
@@ -185,7 +185,7 @@ function RuleSummaryRow({
   rule: KubernetesPolicyRule;
   onRemove: () => void;
 }) {
-  const familyLabel = runtimeFamily === "openclaw" ? "OpenClaw" : "Hermes";
+  const familyLabel = runtimeFamily === "openclaw" ? "OpenClaw" : "Headmaster";
   const cidr = String(rule.cidr || "").trim() || "New rule";
   const description = String(rule.description || "").trim();
   const ports = (
@@ -276,14 +276,14 @@ export default function NetworkPolicyTab({ cluster, onClusterUpdated, onRefresh 
       family: "openclaw",
       label: "OpenClaw ingress",
       namespace: cluster.openclawNamespace || cluster.namespace || "openclaw-agents",
-      description: "Rules for gateway and runtime ingress on Nora-managed OpenClaw pods.",
+      description: "Rules for gateway and runtime ingress on managed OpenClaw pods.",
       baselinePorts: [...POLICY_PORTS.openclaw],
     },
     {
       family: "hermes",
-      label: "Hermes ingress",
+      label: "Headmaster runtime ingress",
       namespace: cluster.hermesNamespace || cluster.namespace || "hermes-agents",
-      description: "Rules for runtime and dashboard ingress on Nora-managed Hermes pods.",
+      description: "Rules for runtime and dashboard ingress on managed Headmaster runtime pods.",
       baselinePorts: [...POLICY_PORTS.hermes],
     },
   ];
@@ -501,7 +501,7 @@ export default function NetworkPolicyTab({ cluster, onClusterUpdated, onRefresh 
           <SummaryCard
             label="Namespaces"
             value={namespaceSummary}
-            caption="OpenClaw and Hermes runtime placement"
+            caption="OpenClaw and Headmaster runtime placement"
           />
           <SummaryCard
             label="Last test"
@@ -546,9 +546,9 @@ export default function NetworkPolicyTab({ cluster, onClusterUpdated, onRefresh 
         ) : null}
 
         <div className="mt-5 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 px-4 py-4">
-          <p className="text-sm font-black text-emerald-950">Nora baseline ingress</p>
+          <p className="text-sm font-black text-emerald-950">Baseline ingress</p>
           <p className="mt-1 text-sm font-medium text-emerald-800">
-            Nora tells Kubernetes to allow the required runtime ports. Custom rules add trusted
+            The control plane tells Kubernetes to allow the required runtime ports. Custom rules add trusted
             CIDRs and do not replace that baseline.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -556,7 +556,7 @@ export default function NetworkPolicyTab({ cluster, onClusterUpdated, onRefresh 
               OpenClaw: {POLICY_PORTS.openclaw.join(", ")}
             </span>
             <span className="rounded-full bg-white px-3 py-2 text-xs font-bold text-emerald-800 ring-1 ring-emerald-200">
-              Hermes: {POLICY_PORTS.hermes.join(", ")}
+              Headmaster: {POLICY_PORTS.hermes.join(", ")}
             </span>
           </div>
         </div>

@@ -18,7 +18,7 @@ import {
 } from "../../../lib/hermesSkillsView";
 
 const REGISTRY_UNAVAILABLE_MESSAGE =
-  "Could not load skills. The Hermes skills registry may be unavailable.";
+  "Could not load skills. The Headmaster skills registry may be unavailable.";
 
 export default function HermesSkillsPanel({ agentId, agentStatus }) {
   const toast = useToast();
@@ -517,7 +517,7 @@ export default function HermesSkillsPanel({ agentId, agentStatus }) {
       <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-12">
         <Bot size={32} className="text-slate-400" />
         <p className="text-sm font-medium text-slate-500">
-          Hermes skills available when agent is{" "}
+          Headmaster skills available when agent is{" "}
           <span className="font-bold text-green-500">running</span>
         </p>
         <p className="text-xs text-slate-400">
@@ -534,12 +534,12 @@ export default function HermesSkillsPanel({ agentId, agentStatus }) {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700">
               <Boxes size={12} />
-              Hermes Skills Hub
+              Headmaster Skills Hub
             </div>
             <h3 className="text-2xl font-black text-slate-900">Manage skills on this agent</h3>
             <p className="max-w-2xl text-sm leading-6 text-slate-600">
-              Review installed Hermes skills, remove skills from the running agent, and browse the
-              Hermes Skills Hub to queue new installs.
+              Review installed Headmaster skills, remove skills from the running agent, and browse the
+              Headmaster Skills Hub to queue new installs.
             </p>
           </div>
 
@@ -651,14 +651,14 @@ export default function HermesSkillsPanel({ agentId, agentStatus }) {
           // panel renders its own copy of the same empty-state block.
           <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
             <p className="text-sm font-bold text-slate-700">
-              No Hermes skills currently installed.
+              No Headmaster skills currently installed.
             </p>
           </div>
         )}
       </div>
 
       <SkillSearchBar
-        placeholder="Search Hermes skills and press Enter"
+        placeholder="Search Headmaster skills and press Enter"
         query={query}
         loading={loading}
         onQueryChange={handleQueryChange}
@@ -727,7 +727,7 @@ export default function HermesSkillsPanel({ agentId, agentStatus }) {
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.9fr)]">
         <div className="min-w-0">
           <SkillGrid
-            loadingLabel="Loading Hermes skills..."
+            loadingLabel="Loading Headmaster skills..."
             skills={browseCards}
             loading={loading}
             error={error}
@@ -740,7 +740,7 @@ export default function HermesSkillsPanel({ agentId, agentStatus }) {
             onToggleSelection={toggleSkillSelection}
             emptyTitle={
               showingDefaultBrowseEmptyState
-                ? "Search the Hermes Skills Hub to discover skills."
+                ? "Search the Headmaster Skills Hub to discover skills."
                 : "No skills found."
             }
             emptyMessage={

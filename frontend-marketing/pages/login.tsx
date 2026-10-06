@@ -1,20 +1,9 @@
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, CheckCircle2, Loader2, Lock, Mail, Shield, Zap } from "lucide-react";
+import { Loader2, Lock, Mail, Zap } from "lucide-react";
 import { useAuthBootstrap } from "../components/AuthBootstrapProvider";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import SeoHead from "../components/SeoHead";
-import { SignupGate } from "../components/SignupGate";
 import { normalizeLocale, useI18n } from "../lib/i18n";
-
-const OSS_REPO_URL = "https://github.com/solomon2773/nora";
-const QUICKSTART_URL = `${OSS_REPO_URL}#quick-start`;
-
-const LOGIN_NOTES = [
-  "Use this account to enter the operator dashboard for this Nora instance.",
-  "Provider keys, workspaces, deployments, logs, and alerts stay tied to the instance you control.",
-  "New environments route you to getting started so you can add a provider and deploy the first runtime.",
-];
 
 type LanguageProfile = {
   effectiveLocale?: string;
@@ -49,7 +38,6 @@ export default function Login() {
     ? "OAuth availability could not be checked. Email and password login remains available."
     : "";
   const oauthLoginEnabled = bootstrapStatus?.oauthLoginEnabled === true;
-  const platformMode = bootstrapStatus?.platformMode || null;
 
   const routeAfterLogin = useCallback(async () => {
     try {
@@ -181,132 +169,39 @@ export default function Login() {
   return (
     <>
       <SeoHead
-        title="Log In | Nora"
-        description="Log in to your Nora operator account to deploy and operate OpenClaw and Hermes runtimes on infrastructure you control."
+        title="Sign in | Headmaster Control"
+        description="Sign in to the Headmaster control panel."
         path="/login"
       />
 
       <div className="site-shell min-h-screen px-4 pb-10 pt-4 text-brand-ink sm:px-6">
         <header className="mx-auto flex max-w-6xl items-center justify-between rounded-2xl border border-brand-cyan/25 bg-white/90 px-4 py-3 shadow-xl shadow-brand-ink/10 backdrop-blur-xl sm:px-5">
-          <Link href="/" className="flex items-center gap-3">
-            <img src="/logo-mark.png" alt="Nora" width={40} height={40} className="h-10 w-10" />
+          <div className="flex items-center gap-3">
             <div>
               <div className="text-sm font-black uppercase tracking-[0.28em] text-brand-ink">
-                Nora
+                Headmaster
               </div>
-              <div className="text-xs text-slate-600">Deploy intelligence anywhere.</div>
+              <div className="text-xs text-slate-600">Control panel</div>
             </div>
-          </Link>
+          </div>
 
           <div className="flex items-center gap-3">
             <LanguageSwitcher className="hidden sm:inline-flex" />
-            <a
-              href={OSS_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden rounded-full border border-brand-ink/10 px-4 py-2 text-sm font-bold text-brand-ink transition-colors hover:bg-brand-cyan/16 sm:inline-flex sm:items-center sm:gap-2"
-            >
-              GitHub <ArrowUpRight size={16} />
-            </a>
-            <SignupGate>
-              <Link
-                href="/signup"
-                className="rounded-full bg-brand-cyan px-4 py-2 text-sm font-black text-brand-ink shadow-lg shadow-brand-cyan/25 transition-transform hover:-translate-y-0.5"
-              >
-                Create Account
-              </Link>
-            </SignupGate>
           </div>
         </header>
 
-        <main className="mx-auto grid max-w-6xl gap-6 pt-10 lg:grid-cols-[minmax(0,1.02fr)_420px] lg:pt-12">
-          <section className="order-2 rounded-[36px] panel-shell px-6 py-8 sm:px-8 lg:order-1 lg:px-10">
-            <div className="eyebrow mb-5">
-              <Shield size={14} />
-              Public repo first
-            </div>
-            <h1 className="max-w-xl text-4xl font-black leading-tight text-white sm:text-5xl">
-              Log in to the Nora instance you operate.
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-8 text-slate-300">
-              Continue to the dashboard for your workspaces, provider keys, runtime deployments,
-              monitoring, logs, and terminal access. Nora keeps the account flow simple while the
-              control plane stays self-hostable and open source.
-            </p>
-
-            <div className="mt-8 rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
-              <div className="text-xs font-black uppercase tracking-[0.28em] text-[#f2d7a1]">
-                After login
-              </div>
-              <div className="mt-4 space-y-4">
-                {LOGIN_NOTES.map((item) => (
-                  <div
-                    key={item}
-                    className="flex items-start gap-3 text-sm leading-7 text-slate-300"
-                  >
-                    <CheckCircle2 size={18} className="mt-1 shrink-0 text-[#8ae6ff]" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <a
-                href={OSS_REPO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4 transition-colors hover:bg-white/[0.06]"
-              >
-                <div className="text-xs font-black uppercase tracking-[0.28em] text-slate-500">
-                  Open source repo
-                </div>
-                <div className="mt-2 text-lg font-black text-white">Browse Nora on GitHub</div>
-                <div className="mt-2 text-sm leading-7 text-slate-400">
-                  Review the public product code and architecture directly.
-                </div>
-              </a>
-              <a
-                href={QUICKSTART_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4 transition-colors hover:bg-white/[0.06]"
-              >
-                <div className="text-xs font-black uppercase tracking-[0.28em] text-slate-500">
-                  Self-host guide
-                </div>
-                <div className="mt-2 text-lg font-black text-white">Open the quick start</div>
-                <div className="mt-2 text-sm leading-7 text-slate-400">
-                  Clone the repo, run the installer, and bring up your own Nora instance.
-                </div>
-              </a>
-            </div>
-
-            <div className="mt-6 rounded-[28px] border border-[#8ae6ff]/18 bg-[#8ae6ff]/7 px-5 py-5">
-              <div className="text-xs font-black uppercase tracking-[0.28em] text-[#eef4fb]">
-                Instance note
-              </div>
-              <p className="mt-3 text-sm leading-7 text-slate-300">
-                {platformMode === "selfhosted"
-                  ? "If this is a fresh self-hosted instance, use the operator account created during setup or create the first account before continuing into Settings and Deploy."
-                  : platformMode === "paas"
-                    ? "If this hosted instance is new for you, create an account first and then come back here to continue into the operator surface."
-                    : "Use the operator account created for this Nora instance, or create the first account if registration is still open."}
-              </p>
-            </div>
-          </section>
-
-          <section className="order-1 rounded-[36px] panel-warm px-6 py-8 sm:px-8 lg:order-2">
+        <main className="mx-auto grid max-w-md gap-6 pt-10 lg:pt-12">
+          <section className="rounded-[36px] panel-warm px-6 py-8 sm:px-8">
             <div className="eyebrow eyebrow-warm mb-5">
               <Zap size={14} />
-              Easy access
+              Control panel
             </div>
             <h2 className="text-3xl font-black leading-tight text-slate-950">
-              Log in to your operator account
+              Sign in
             </h2>
             <p className="mt-3 text-sm leading-7 text-slate-700">
-              Use email and password for this Nora instance. If OAuth is enabled here, you can use
-              that too.
+              Use the email and password of your Headmaster admin account. Accounts are created
+              by the operator; there is no public sign-up.
             </p>
 
             {oauthLoginEnabled && (
@@ -436,31 +331,6 @@ export default function Login() {
                 {loading ? "Logging in..." : "Log In"}
               </button>
             </form>
-
-            <div className="mt-6 flex flex-col gap-3 text-sm text-slate-700">
-              <SignupGate>
-                <p>
-                  Need an account?{" "}
-                  <Link
-                    href="/signup"
-                    className="font-black text-slate-950 underline underline-offset-4"
-                  >
-                    Create one here.
-                  </Link>
-                </p>
-              </SignupGate>
-              <p>
-                Prefer to self-host first?{" "}
-                <a
-                  href={QUICKSTART_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-black text-slate-950 underline underline-offset-4"
-                >
-                  Open the quick start.
-                </a>
-              </p>
-            </div>
           </section>
         </main>
       </div>

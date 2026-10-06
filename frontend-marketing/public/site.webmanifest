@@ -1,7 +1,7 @@
 {
-  "name": "Nora",
-  "short_name": "Nora",
-  "description": "Self-hosted AI agent ops platform.",
+  "name": "Headmaster Control",
+  "short_name": "Headmaster",
+  "description": "Headmaster control panel.",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -19,5 +19,5 @@
   "theme_color": "#071018",
   "background_color": "#071018",
   "display": "standalone",
-  "start_url": "/"
+  "start_url": "/login"
 }

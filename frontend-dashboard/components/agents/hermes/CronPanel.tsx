@@ -98,7 +98,7 @@ export default function HermesCronPanel({ agentId }) {
       const data = await jobsRes.json().catch(() => ({}));
       const integrationsData = await integrationsRes.json().catch(() => []);
       if (!jobsRes.ok) {
-        throw new Error(data.error || "Failed to load Hermes cron jobs");
+        throw new Error(data.error || "Failed to load Headmaster cron jobs");
       }
 
       const nextJobs = Array.isArray(data?.jobs) ? data.jobs : [];
@@ -119,7 +119,7 @@ export default function HermesCronPanel({ agentId }) {
         return getJobId(nextJobs[0]);
       });
     } catch (nextError) {
-      setError(nextError.message || "Failed to load Hermes cron jobs");
+      setError(nextError.message || "Failed to load Headmaster cron jobs");
       setJobs([]);
       setIntegrationLinks({});
       setSelectedJobId("");
@@ -175,7 +175,7 @@ export default function HermesCronPanel({ agentId }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Failed to create Hermes cron job");
+        throw new Error(data.error || "Failed to create Headmaster cron job");
       }
 
       toast.success("Cron job created");
@@ -184,7 +184,7 @@ export default function HermesCronPanel({ agentId }) {
       await loadJobs();
       emitAgentDataChanged({ agentId, scope: "cron" });
     } catch (nextError) {
-      const message = nextError.message || "Failed to create Hermes cron job";
+      const message = nextError.message || "Failed to create Headmaster cron job";
       setError(message);
       toast.error(message);
     } finally {
@@ -209,14 +209,14 @@ export default function HermesCronPanel({ agentId }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Failed to update Hermes cron job");
+        throw new Error(data.error || "Failed to update Headmaster cron job");
       }
 
       toast.success("Cron job updated");
       await loadJobs();
       emitAgentDataChanged({ agentId, scope: "cron" });
     } catch (nextError) {
-      const message = nextError.message || "Failed to update Hermes cron job";
+      const message = nextError.message || "Failed to update Headmaster cron job";
       setError(message);
       toast.error(message);
     } finally {
@@ -235,14 +235,14 @@ export default function HermesCronPanel({ agentId }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Failed to delete Hermes cron job");
+        throw new Error(data.error || "Failed to delete Headmaster cron job");
       }
 
       toast.success("Cron job deleted");
       await loadJobs();
       emitAgentDataChanged({ agentId, scope: "cron" });
     } catch (nextError) {
-      const message = nextError.message || "Failed to delete Hermes cron job";
+      const message = nextError.message || "Failed to delete Headmaster cron job";
       setError(message);
       toast.error(message);
     } finally {
@@ -283,13 +283,13 @@ export default function HermesCronPanel({ agentId }) {
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
-            Hermes Cron
+            Headmaster Cron
           </p>
           <p className="mt-1 text-sm font-bold text-slate-900">
-            Select a Hermes cron job to edit its details.
+            Select a Headmaster cron job to edit its details.
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Jobs are stored inside the Hermes runtime and surfaced here through the runtime API.
+            Jobs are stored inside the Headmaster runtime and surfaced here through the runtime API.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -404,7 +404,7 @@ export default function HermesCronPanel({ agentId }) {
           <CalendarClock size={24} className="mx-auto text-slate-300" />
           <p className="mt-3 text-sm font-bold text-slate-600">No cron jobs configured</p>
           <p className="mt-1 text-xs text-slate-500">
-            Add a recurring prompt to let Hermes run scheduled tasks.
+            Add a recurring prompt to let Headmaster run scheduled tasks.
           </p>
         </div>
       ) : (
@@ -485,7 +485,7 @@ export default function HermesCronPanel({ agentId }) {
                         </span>
                       </div>
                       <p className="mt-2 text-xs text-slate-500">
-                        Edit the job details, then save them back to Hermes.
+                        Edit the job details, then save them back to Headmaster.
                       </p>
                     </div>
                   </div>

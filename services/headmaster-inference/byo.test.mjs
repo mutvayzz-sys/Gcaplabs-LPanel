@@ -183,6 +183,23 @@ test("byo chat: forwards to the fixed endpoint with the user's key; non-catalogu
   assert.equal(state.assignmentCalls + state.providerLookups, 0);
 });
 
+test("byo anthropic: fixed OpenAI-compatible endpoint, user's key in both auth headers", async (t) => {
+  const ciphertext = encryptProviderKey({ secret: KEY_SECRET, ownerId: OWNER, provider: "anthropic", apiKey: USER_KEY });
+  const { state, chat, models } = await setup(t, {
+    rows: [{ owner_id: OWNER, provider: "anthropic", ciphertext, revision: 1 }],
+  });
+  assert.equal((await chat(CHAT, { byo_provider: "anthropic" })).status, 200);
+  assert.equal((await models({ byo_provider: "anthropic" })).status, 200);
+  const [c, m] = state.providerCalls;
+  assert.equal(c.url, "https://api.anthropic.com/v1/chat/completions");
+  assert.equal(m.url, "https://api.anthropic.com/v1/models");
+  for (const call of [c, m]) {
+    assert.equal(call.init.headers.authorization, `Bearer ${USER_KEY}`);
+    assert.equal(call.init.headers["x-api-key"], USER_KEY);
+  }
+  assert.ok(!JSON.stringify(state.logs).includes(USER_KEY));
+});
+
 test("byo chat: streams SSE unchanged", async (t) => {
   const { chat } = await setup(t);
   const res = await chat({ ...CHAT, stream: true });
@@ -208,7 +225,7 @@ test("byo chat: model id regex, client authority fields, token cap enforced", as
 
 test("unknown or malformed byo_provider claim is rejected 400 without any lookup", async (t) => {
   const { models, chat, state } = await setup(t);
-  for (const claim of ["anthropic", "custom", 7, null, "", "__proto__", "constructor"]) {
+  for (const claim of ["cohere", "custom", 7, null, "", "__proto__", "constructor"]) {
     // Non-string claims fail assertion verification (401); unknown strings are 400.
     const expected = typeof claim === "string" ? 400 : 401;
     assert.equal((await models({ byo_provider: claim })).status, expected);
