@@ -569,7 +569,7 @@ export default function HermesSkillsPanel({ agentId, agentStatus }) {
             {library.length} saved
           </div>
           <p className="text-sm text-slate-600">
-            Skills curated for this Nora instance. Install one on this agent, or remove it from the
+            Skills curated for this LPanel instance. Install one on this agent, or remove it from the
             shared library.
           </p>
           {libraryError ? <p className="text-sm font-medium text-red-600">{libraryError}</p> : null}

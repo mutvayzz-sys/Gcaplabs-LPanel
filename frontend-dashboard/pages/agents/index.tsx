@@ -174,7 +174,7 @@ export default function Agents() {
                 </h1>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest opacity-80 leading-none">
-                    Nora Control Plane
+                    LPanel Control Plane
                   </span>
                   <div className="w-1 h-1 bg-slate-300 rounded-full"></div>
                   <span className="text-xs font-bold text-blue-600 leading-none">

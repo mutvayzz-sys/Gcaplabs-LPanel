@@ -332,7 +332,7 @@ export default function BackupsAdminPage() {
       }
       const disposition = response.headers.get("content-disposition") || "";
       const match = disposition.match(/filename="([^"]+)"/i);
-      const filename = match?.[1] || `${backup.name || "nora-backup"}.tgz`;
+      const filename = match?.[1] || `${backup.name || "lpanel-backup"}.tgz`;
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

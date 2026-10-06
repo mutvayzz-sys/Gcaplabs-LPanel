@@ -174,9 +174,9 @@ export default function ToolsPanel({ agentId }) {
                     )}
                     <p className="text-[10px] text-slate-400">
                       {noraMeta?.executionState === "runtime_skill"
-                        ? "This tool is connected through Nora and is executable inside the agent via the generated nora-integrations skill and local nora-integration-tool command."
+                        ? "This tool is connected through LPanel and is executable inside the agent via the generated nora-integrations skill and local nora-integration-tool command."
                         : noraMeta?.executionState === "manifest_only"
-                          ? "This tool comes from the Nora integration manifest. It advertises provider capability and schema, but the current runtime does not execute it yet."
+                          ? "This tool comes from the LPanel integration manifest. It advertises provider capability and schema, but the current runtime does not execute it yet."
                           : "Tools are invoked automatically by the AI model during chat conversations."}
                     </p>
                   </div>

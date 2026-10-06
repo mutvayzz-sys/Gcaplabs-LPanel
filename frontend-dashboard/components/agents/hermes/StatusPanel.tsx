@@ -674,7 +674,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-900">Primary LLM</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Pick a saved Nora provider/model to make it the default selection and push it
+                    Pick a saved LPanel provider/model to make it the default selection and push it
                     into Headmaster.
                   </p>
                 </div>
@@ -801,7 +801,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
               <p className="text-sm font-bold text-slate-900">Connect Headmaster Desktop</p>
               <p className="mt-1 text-xs text-slate-500">
                 Point Headmaster Desktop (or any direct client) at this address. Reachable only on the
-                interface Nora publishes agent ports to (DOCKER_AGENT_BIND_IP).
+                interface LPanel publishes agent ports to (DOCKER_AGENT_BIND_IP).
               </p>
             </div>
             <div className="space-y-3 p-4">
@@ -811,7 +811,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
               ) : null}
               {/* Dashboard login credentials are shown only alongside a dashboard
                   URL to log into. With the 9119 port unpublished there is no
-                  direct dashboard to reach — the dashboard embedded in Nora
+                  direct dashboard to reach — the dashboard embedded in LPanel
                   authenticates itself — so credentials would only confuse. */}
               {connect.dashboardUrl && connect.dashboardUsername ? (
                 <ConnectField
@@ -836,7 +836,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
                 These credentials rotate when the agent is redeployed — the API key and dashboard
                 password are regenerated on each deploy. The URLs above are plain HTTP unless you
                 have put TLS in front of them, so use them over a trusted network; the dashboard
-                embedded in Nora stays behind your Nora origin instead.
+                embedded in LPanel stays behind your LPanel origin instead.
               </p>
             </div>
           </section>

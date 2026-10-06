@@ -912,7 +912,7 @@ const CLONE_MODE_COPY = {
   files_only: "Copies only the OpenClaw agent files.",
   files_plus_memory: "Copies the agent files plus OpenClaw workspace and session memory.",
   full_clone:
-    "Copies files, memory, and Nora wiring structure. Secrets are stripped and must be reconnected.",
+    "Copies files, memory, and LPanel wiring structure. Secrets are stripped and must be reconnected.",
 };
 
 function DuplicateAgentDialog({
@@ -1153,7 +1153,7 @@ function PublishAgentHubDialog({
             </h3>
             <p className="text-sm text-slate-500 mt-1 leading-relaxed">
               Share <span className="font-semibold text-slate-700">{sourceName}</span> as a reusable
-              template. Nora shares only template files and runs a secret scan before saving the
+              template. LPanel shares only template files and runs a secret scan before saving the
               listing.
             </p>
           </div>
@@ -1225,9 +1225,9 @@ function PublishAgentHubDialog({
               onChange={(e) => onShareTargetChange(e.target.value)}
               className="w-full text-sm border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
-              <option value="both">Internal users and Nora community</option>
+              <option value="both">Internal users and LPanel community</option>
               <option value="internal">Internal users only</option>
-              <option value="community">Nora community only</option>
+              <option value="community">LPanel community only</option>
             </select>
           </div>
           <div>
@@ -1248,7 +1248,7 @@ function PublishAgentHubDialog({
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-          Credentials, session memory, integrations, and channels are not shared. If Nora detects
+          Credentials, session memory, integrations, and channels are not shared. If LPanel detects
           `.env`, token-like values, or private keys, the submission is blocked until you remove
           them.
         </div>

@@ -54,7 +54,7 @@ function formatCount(value) {
 }
 
 function publisherName(detail) {
-  return detail?.publisher?.displayName || detail?.owner_name || detail?.owner_email || "Nora";
+  return detail?.publisher?.displayName || detail?.owner_name || detail?.owner_email || "LPanel";
 }
 
 function parseFilename(headerValue, fallbackName) {

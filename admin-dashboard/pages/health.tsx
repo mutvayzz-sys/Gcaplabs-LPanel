@@ -92,8 +92,7 @@ export default function HealthPage() {
               Control-plane health
             </h1>
             <p className="text-sm text-slate-500">
-              Self-check of the Nora control plane. Also available from the CLI as{" "}
-              <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">nora doctor</code>.
+              Self-check of the LPanel control plane.
             </p>
           </div>
           <button

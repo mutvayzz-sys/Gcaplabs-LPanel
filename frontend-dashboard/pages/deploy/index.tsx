@@ -731,7 +731,7 @@ export default function Deploy() {
   async function inspectLiveMigrationSource() {
     if (!canUseLiveMigration) {
       setMigrationMethod("upload");
-      toast.error("Live Pull is restricted to platform admins on self-hosted Nora.");
+      toast.error("Live Pull is restricted to platform admins on self-hosted LPanel.");
       return;
     }
 
@@ -814,13 +814,13 @@ export default function Deploy() {
   const checklist =
     deploymentMode === "migrate"
       ? [
-          "Inspect the source runtime or upload a Nora migration bundle first.",
+          "Inspect the source runtime or upload a LPanel migration bundle first.",
           "Review the imported files, secrets, and warnings before recreating the agent.",
-          "Choose the destination execution target and resource profile Nora should own.",
+          "Choose the destination execution target and resource profile LPanel should own.",
           "After deploy, validate provider keys, logs, files, and runtime health from the agent detail view.",
           isHermes
-            ? "Use Files, Hermes WebUI, logs, and terminal to confirm the migrated runtime behaves the same under Nora."
-            : "Use Files, chat, logs, and terminal to confirm the migrated runtime behaves the same under Nora.",
+            ? "Use Files, Hermes WebUI, logs, and terminal to confirm the migrated runtime behaves the same under LPanel."
+            : "Use Files, chat, logs, and terminal to confirm the migrated runtime behaves the same under LPanel.",
         ]
       : [
           "Pick a clear operator-friendly agent name.",
@@ -871,10 +871,10 @@ export default function Deploy() {
                   {isAdopt
                     ? "Register an OpenClaw or Hermes runtime that's already running elsewhere, by its URL and gateway token."
                     : deploymentMode === "migrate"
-                      ? "Inspect an existing OpenClaw or Hermes runtime, then recreate it under Nora control."
+                      ? "Inspect an existing OpenClaw or Hermes runtime, then recreate it under LPanel control."
                       : isHermes
-                        ? "Provision a new Hermes runtime path to your Nora control plane."
-                        : "Provision a new OpenClaw runtime path to your Nora control plane."}
+                        ? "Provision a new Hermes runtime path to your LPanel control plane."
+                        : "Provision a new OpenClaw runtime path to your LPanel control plane."}
                 </p>
               </div>
             </div>
@@ -885,9 +885,9 @@ export default function Deploy() {
               </p>
               <p className="text-sm text-blue-700/80 leading-relaxed">
                 {isAdopt
-                  ? "Adoption does not provision anything. Nora validates the endpoint, then monitors and proxies the existing runtime so you can chat, view its dashboard, and track health from one control surface. Lifecycle (start/stop) stays with whoever runs it; “Deregister” later just removes it from Nora."
+                  ? "Adoption does not provision anything. LPanel validates the endpoint, then monitors and proxies the existing runtime so you can chat, view its dashboard, and track health from one control surface. Lifecycle (start/stop) stays with whoever runs it; “Deregister” later just removes it from LPanel."
                   : deploymentMode === "migrate"
-                    ? "This flow does not adopt the old runtime in place. Nora inspects the source, stores a migration draft, then recreates the workload as a Nora-managed agent so files, managed secrets, and runtime validation all land in one control surface."
+                    ? "This flow does not adopt the old runtime in place. LPanel inspects the source, stores a migration draft, then recreates the workload as a LPanel-managed agent so files, managed secrets, and runtime validation all land in one control surface."
                     : isHermes
                       ? "The goal of this screen is not just deployment - it is a complete first-run loop. Once the agent is live, finish activation by syncing an LLM provider and validating runtime health, logs, and terminal access."
                       : "The goal of this screen is not just deployment - it is a complete first-run loop. Once the agent is live, finish activation by syncing an LLM provider and validating chat, logs, and terminal access."}
@@ -958,12 +958,12 @@ export default function Deploy() {
                       Deployment Mode
                     </p>
                     <h2 className="mt-2 text-lg font-black text-slate-900">
-                      Start clean or recreate an existing runtime under Nora.
+                      Start clean or recreate an existing runtime under LPanel.
                     </h2>
                     <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
                       Blank deploy provisions a fresh agent. Migrate existing inspects an OpenClaw
                       or Hermes runtime, previews the import surface, then deploys a new
-                      Nora-managed agent from that draft.
+                      LPanel-managed agent from that draft.
                     </p>
                   </div>
                   {migrationDraft ? (
@@ -999,7 +999,7 @@ export default function Deploy() {
                       <div>
                         <p className="text-sm font-black text-slate-900">Blank Deploy</p>
                         <p className="text-xs text-slate-500">
-                          Fresh Nora-owned agent with no imported state.
+                          Fresh LPanel-owned agent with no imported state.
                         </p>
                       </div>
                     </div>
@@ -1081,7 +1081,7 @@ export default function Deploy() {
                             <div>
                               <p className="text-sm font-bold text-slate-900">Upload Bundle</p>
                               <p className="text-xs text-slate-500">
-                                Nora export bundle or legacy OpenClaw template JSON.
+                                LPanel export bundle or legacy OpenClaw template JSON.
                               </p>
                             </div>
                           </div>
@@ -1115,11 +1115,11 @@ export default function Deploy() {
                             Upload Migration Bundle
                           </p>
                           <h3 className="mt-2 text-base font-black text-slate-900">
-                            Import an existing Nora bundle or OpenClaw template snapshot.
+                            Import an existing LPanel bundle or OpenClaw template snapshot.
                           </h3>
                           <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                            Upload Nora migration bundles, Nora legacy template JSON, or previous
-                            exports from another Nora control plane. Nora will parse the package,
+                            Upload LPanel migration bundles, LPanel legacy template JSON, or previous
+                            exports from another LPanel control plane. LPanel will parse the package,
                             summarize the managed state, and keep the source runtime family aligned
                             for deploy.
                           </p>
@@ -1149,9 +1149,9 @@ export default function Deploy() {
                               Privileged self-hosted admin operation
                             </p>
                             <p className="mt-2 text-sm leading-relaxed text-amber-900">
-                              Live Pull reads a running Docker container on this Nora host. Use it
+                              Live Pull reads a running Docker container on this LPanel host. Use it
                               only when you trust the container contents and intend to copy its
-                              managed files and supported secrets into a Nora migration draft.
+                              managed files and supported secrets into a LPanel migration draft.
                             </p>
                           </div>
 
@@ -1179,7 +1179,7 @@ export default function Deploy() {
                               </span>
                               <input
                                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-brand-cyan focus:bg-white focus:ring-2 focus:ring-brand-cyan/25"
-                                placeholder="e.g. nora-hermes-prod"
+                                placeholder="e.g. lpanel-hermes-prod"
                                 value={migrationSource.container}
                                 onChange={(event) =>
                                   setMigrationSource((current) => ({
@@ -1196,7 +1196,7 @@ export default function Deploy() {
                               Optional Root Overrides
                             </p>
                             <p className="mt-2 text-sm text-slate-500">
-                              Leave these blank to use Nora&apos;s standard import paths.
+                              Leave these blank to use LPanel&apos;s standard import paths.
                             </p>
                             <div className="mt-3 grid gap-3">
                               <label className="flex flex-col gap-2">
@@ -1297,7 +1297,7 @@ export default function Deploy() {
               />
               <p className="text-xs text-slate-500 ml-2">
                 {deploymentMode === "migrate"
-                  ? "Choose the name Nora should use for the recreated agent. The imported source name can stay as-is or be replaced here."
+                  ? "Choose the name LPanel should use for the recreated agent. The imported source name can stay as-is or be replaced here."
                   : "Choose a name other operators will understand at a glance."}{" "}
                 Example container slug: <span className="font-mono">{suggestedContainerName}</span>
               </p>
@@ -1320,9 +1320,9 @@ export default function Deploy() {
                 </p>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                   {runtimeFamilyLocked
-                    ? `The current migration draft was captured from ${formatRuntimeFamilyLabel(runtimeFamilyLocked)}. Nora keeps the runtime family aligned while you choose the destination execution target and sandbox profile.`
+                    ? `The current migration draft was captured from ${formatRuntimeFamilyLabel(runtimeFamilyLocked)}. LPanel keeps the runtime family aligned while you choose the destination execution target and sandbox profile.`
                     : activeRuntimeFamily?.operatorContractSummary ||
-                      "Nora keeps the operator workflow fixed while you choose where the runtime executes and which sandbox profile it uses."}
+                      "LPanel keeps the operator workflow fixed while you choose where the runtime executes and which sandbox profile it uses."}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
                   {activeRuntimeFamily?.expansionPolicy}
@@ -1416,7 +1416,7 @@ export default function Deploy() {
                 />
                 <p className="text-xs text-slate-500 ml-2">
                   The reachable address of your already-running{" "}
-                  {isHermes ? "Hermes dashboard" : "OpenClaw gateway"}. Nora monitors and proxies it
+                  {isHermes ? "Hermes dashboard" : "OpenClaw gateway"}. LPanel monitors and proxies it
                   — it does not provision or control the runtime.
                 </p>
                 <label className="mt-2 text-xs font-black text-slate-400 uppercase tracking-widest leading-none ml-2">
@@ -1430,7 +1430,7 @@ export default function Deploy() {
                   onChange={(e) => setAdoptGatewayToken(e.target.value)}
                 />
                 <p className="text-xs text-slate-500 ml-2">
-                  Used to authenticate Nora to your runtime. Keep it secret.
+                  Used to authenticate LPanel to your runtime. Keep it secret.
                 </p>
               </div>
             )}
@@ -1524,8 +1524,8 @@ export default function Deploy() {
                   {visibleExecutionTargets.length === 0 ? (
                     <p className="text-xs text-amber-600 ml-2">
                       {isAdmin
-                        ? "No execution targets are enabled for this Nora control plane."
-                        : "No onboarding-ready execution targets are enabled for this Nora control plane."}
+                        ? "No execution targets are enabled for this LPanel control plane."
+                        : "No onboarding-ready execution targets are enabled for this LPanel control plane."}
                     </p>
                   ) : null}
                 </div>
@@ -1827,7 +1827,7 @@ export default function Deploy() {
                     <p className="text-sm font-bold text-slate-900">1. Verify provider keys</p>
                     <p className="text-sm text-slate-500 leading-relaxed">
                       {deploymentMode === "migrate"
-                        ? "Nora imports supported provider and secret material into managed storage. Review the result in Settings before deeper testing."
+                        ? "LPanel imports supported provider and secret material into managed storage. Review the result in Settings before deeper testing."
                         : "If your agent needs model access, add or sync an LLM provider in Settings before deeper testing."}
                     </p>
                   </div>
@@ -1840,10 +1840,10 @@ export default function Deploy() {
                     <p className="text-sm font-bold text-slate-900">2. Validate the runtime</p>
                     <p className="text-sm text-slate-500 leading-relaxed">
                       {deploymentMode === "migrate"
-                        ? "After deploy, Nora sends you straight to the recreated agent so you can compare files, logs, and runtime behavior without leaving the operator flow."
+                        ? "After deploy, LPanel sends you straight to the recreated agent so you can compare files, logs, and runtime behavior without leaving the operator flow."
                         : isHermes
-                          ? "After deploy, Nora sends you straight to the new agent so you can verify runtime health, logs, and terminal access without hunting for the next screen."
-                          : "After deploy, Nora sends you straight to the new agent so you can verify chat, logs, and terminal without hunting for the next screen."}
+                          ? "After deploy, LPanel sends you straight to the new agent so you can verify runtime health, logs, and terminal access without hunting for the next screen."
+                          : "After deploy, LPanel sends you straight to the new agent so you can verify chat, logs, and terminal without hunting for the next screen."}
                     </p>
                   </div>
                 </div>
@@ -1855,8 +1855,8 @@ export default function Deploy() {
                     <p className="text-sm font-bold text-slate-900">3. Move into operations</p>
                     <p className="text-sm text-slate-500 leading-relaxed">
                       {deploymentMode === "migrate"
-                        ? "Once the recreated agent is healthy, treat the old runtime as legacy and keep the Nora-managed version as the operational source of truth."
-                        : "Once the first agent is healthy, use Nora for channels, integrations, scheduling, and broader fleet management."}
+                        ? "Once the recreated agent is healthy, treat the old runtime as legacy and keep the LPanel-managed version as the operational source of truth."
+                        : "Once the first agent is healthy, use LPanel for channels, integrations, scheduling, and broader fleet management."}
                     </p>
                   </div>
                 </div>
@@ -1892,8 +1892,8 @@ function MigrationDraftPreview({ draft, busyAction, onDiscard }) {
         </p>
         <h3 className="mt-2 text-base font-black text-slate-900">No draft prepared yet.</h3>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          Upload a Nora export bundle to preview files, imported channels, provider keys, warnings,
-          and the runtime family Nora will recreate. Self-hosted platform admins can also inspect a
+          Upload a LPanel export bundle to preview files, imported channels, provider keys, warnings,
+          and the runtime family LPanel will recreate. Self-hosted platform admins can also inspect a
           local Docker container with the privileged Live Pull option.
         </p>
       </div>
@@ -1909,7 +1909,7 @@ function MigrationDraftPreview({ draft, busyAction, onDiscard }) {
       : draft?.source?.kind === "legacy-template"
         ? "Legacy template upload"
         : draft?.source?.kind === "nora-agent"
-          ? "Nora export"
+          ? "LPanel export"
           : "Uploaded bundle";
   const statCards = isHermesDraft
     ? [
@@ -2056,7 +2056,7 @@ function MigrationDraftPreview({ draft, busyAction, onDiscard }) {
             !draft.managed?.channels?.length &&
             !draft.managed?.agentSecretOverrides?.length ? (
               <p className="text-sm text-slate-500">
-                No Nora-managed records were detected in this source. Nora will still import files
+                No LPanel-managed records were detected in this source. LPanel will still import files
                 and any supported runtime state it can see.
               </p>
             ) : null}
@@ -2104,7 +2104,7 @@ function MigrationDraftPreview({ draft, busyAction, onDiscard }) {
               <p className="text-sm font-black">OpenClaw Import Surface</p>
             </div>
             <p className="mt-3 text-sm leading-relaxed text-slate-500">
-              Nora imports the agent files, workspace contents, session memory, and supported
+              LPanel imports the agent files, workspace contents, session memory, and supported
               provider material from the source runtime. Deploy target and sandbox profile remain
               operator-controlled on this screen.
             </p>

@@ -87,7 +87,7 @@ export default function BudgetSection({ agentId }) {
         <div>
           <h3 className="text-sm font-bold text-gray-900">LLM budget caps</h3>
           <p className="text-xs text-gray-500">
-            Nora pauses this agent automatically when spend crosses 100% of a cap. A warning event
+            LPanel pauses this agent automatically when spend crosses 100% of a cap. A warning event
             fires at the soft threshold.
           </p>
         </div>

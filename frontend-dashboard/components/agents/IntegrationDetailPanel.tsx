@@ -335,7 +335,7 @@ export default function IntegrationDetailPanel({
             </span>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            Update the connected integration and save the new config back to Nora.
+            Update the connected integration and save the new config back to LPanel.
           </p>
         </div>
         <span className="rounded-full bg-slate-900 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
@@ -576,14 +576,14 @@ export default function IntegrationDetailPanel({
                 {wecomMode === "agent" || wecomMode === "both" ? (
                   <p>
                     Agent mode still needs the WeCom admin console callback setup to use your public
-                    Nora/OpenClaw host with this path:{" "}
+                    LPanel/OpenClaw host with this path:{" "}
                     <span className="font-mono text-xs">{wecomCallbackPath}</span>.
                   </p>
                 ) : null}
                 {(wecomMode === "agent" || wecomMode === "both") && wecomCallbackUrl ? (
                   <p className="text-xs text-slate-500">
                     The browser-resolved URL above is only a preview based on the host you are
-                    currently using to access Nora. If WeCom reaches Nora through a tunnel or public
+                    currently using to access LPanel. If WeCom reaches LPanel through a tunnel or public
                     domain, use that public base URL instead.
                   </p>
                 ) : null}

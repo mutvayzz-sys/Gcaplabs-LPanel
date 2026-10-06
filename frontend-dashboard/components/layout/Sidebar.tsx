@@ -14,8 +14,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ShoppingBag,
-  GitBranch,
-  ExternalLink,
   X,
 } from "lucide-react";
 import { clsx } from "clsx";
@@ -36,7 +34,6 @@ type NavItem = {
   adminOnly?: boolean;
 };
 
-const REPO_URL = "https://github.com/solomon2773/nora";
 const NAV_ITEMS: NavItem[] = [
   { name: "Dashboard", icon: LayoutDashboard, href: "/app/dashboard" },
   { name: "Getting Started", icon: ListChecks, href: "/app/getting-started" },
@@ -182,44 +179,6 @@ export default function Sidebar({
           collapsed ? "p-2" : "p-4",
         )}
       >
-        {!collapsed && (
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="hm-attribution"
-            title={t("Powered by Nora")}
-          >
-            {t("Powered by Nora")}
-          </a>
-        )}
-        <a
-          href={REPO_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="block"
-          title={collapsed ? t("GitHub Repo") : undefined}
-          aria-label={t("GitHub Repo")}
-        >
-          <div
-            className={clsx(
-              "flex items-center gap-3 rounded-xl text-sm font-medium transition-all group text-brand-foreground/50 hover:bg-brand-cyan/10 hover:text-brand-foreground",
-              collapsed ? "justify-center px-2 py-3" : "px-4 py-3",
-            )}
-          >
-            <GitBranch size={18} className="shrink-0" />
-            {!collapsed && (
-              <>
-                <span className="flex-1">{t("GitHub Repo")}</span>
-                <ExternalLink
-                  size={14}
-                  className="text-brand-foreground/35 group-hover:text-brand-cyan"
-                />
-              </>
-            )}
-          </div>
-        </a>
-
         <a
           href={localizePath("/app/settings")}
           className="block"

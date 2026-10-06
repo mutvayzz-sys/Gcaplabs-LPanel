@@ -168,7 +168,7 @@ test("bridge library and theme tokens stay synchronized across dashboards", asyn
   }
 });
 
-test("operator navigation, attribution, and notices are preserved", async () => {
+test("operator navigation and notices are preserved, with no upstream attribution", async () => {
   const sidebar = await read("frontend-dashboard/components/layout/Sidebar.tsx");
   for (const href of [
     "/app/dashboard",
@@ -184,8 +184,8 @@ test("operator navigation, attribution, and notices are preserved", async () => 
   ]) {
     assert.ok(sidebar.includes(`"${href}"`), `operator nav keeps ${href}`);
   }
-  assert.match(sidebar, /https:\/\/github\.com\/solomon2773\/nora/, "upstream repo link preserved");
-  assert.match(sidebar, /Powered by Nora/, "upstream attribution preserved");
+  assert.doesNotMatch(sidebar, /solomon2773\/nora/, "no upstream repo link in the footer");
+  assert.doesNotMatch(sidebar, /Powered by/, "no upstream attribution in the footer");
 
   const topbar = await read("frontend-dashboard/components/layout/Topbar.tsx");
   assert.ok(!topbar.includes('"Operational"'), "hard-coded Operational health badge removed");
@@ -209,7 +209,7 @@ test("operator navigation, attribution, and notices are preserved", async () => 
   ]) {
     assert.ok(adminLayout.includes(`href: ${href}`), `platform nav keeps ${href}`);
   }
-  assert.match(adminLayout, /Powered by Nora/, "platform attribution preserved");
+  assert.doesNotMatch(adminLayout, /Powered by/, "no upstream attribution in the admin footer");
 });
 
 test("launch exchange backend wiring is present and fail-closed", async () => {
@@ -285,4 +285,29 @@ test("compose threads the parent origin into both dashboard builds", async () =>
       `${app}: compose build arg present`,
     );
   }
+
+test("no visible \"Nora\" string in either dashboard", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const walk = async (dir) => {
+    const out = [];
+    for (const entry of await readdir(path.join(repoRoot, dir), { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === ".next") continue;
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) out.push(...(await walk(rel)));
+      else if (/\.(tsx?|md)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) out.push(rel);
+    }
+    return out;
+  };
+  const hits = [];
+  for (const dir of ["admin-dashboard", "frontend-dashboard"]) {
+    for (const file of await walk(dir)) {
+      const lines = (await read(file)).split("\n");
+      lines.forEach((line, i) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return;
+        if (/\bNora\b/.test(line)) hits.push(`${file}:${i + 1}`);
+      });
+    }
+  }
+  assert.deepEqual(hits, [], "capitalised Nora must not appear in visible strings");
 });

@@ -297,7 +297,7 @@ export default function AgentHubAdminDetailPage() {
                     <span>&bull;</span>
                     <span>v{detail.current_version || 1}</span>
                     <span>&bull;</span>
-                    <span>{detail.owner_name || detail.owner_email || "Nora"}</span>
+                    <span>{detail.owner_name || detail.owner_email || "LPanel"}</span>
                     {detail.snapshot?.templateKey ? (
                       <>
                         <span>&bull;</span>
@@ -530,7 +530,7 @@ export default function AgentHubAdminDetailPage() {
                     <MetadataRow label="Price" value={detail.price || "Free"} />
                     <MetadataRow
                       label="Owner"
-                      value={detail.owner_name || detail.owner_email || "Nora"}
+                      value={detail.owner_name || detail.owner_email || "LPanel"}
                     />
                     <MetadataRow
                       label="Bootstrap"

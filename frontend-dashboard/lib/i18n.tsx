@@ -23,7 +23,7 @@ export const LOCALE_LABELS: Record<Locale, string> = {
 
 const TRANSLATIONS = {
   es: {
-    Nora: "Nora",
+    LPanel: "LPanel",
     Dashboard: "Panel",
     "Getting Started": "Primeros pasos",
     Agents: "Agentes",
@@ -64,8 +64,8 @@ const TRANSLATIONS = {
     "System Overview": "Resumen del sistema",
     "Fleet Management": "Gestion de flota",
     "Deploy New Agent": "Desplegar nuevo agente",
-    "Bring Nora online like a production operator platform.":
-      "Pon Nora en marcha como una plataforma operativa de produccion.",
+    "Bring LPanel online like a production operator platform.":
+      "Pon LPanel en marcha como una plataforma operativa de produccion.",
     "Resource limits": "Limites de recursos",
     "Update password": "Actualizar contrasena",
     "Password updated successfully": "Contrasena actualizada correctamente",
@@ -173,7 +173,7 @@ const TRANSLATIONS = {
     Monthly: "Mensual",
   },
   fr: {
-    Nora: "Nora",
+    LPanel: "LPanel",
     Dashboard: "Tableau de bord",
     "Getting Started": "Premiers pas",
     Agents: "Agents",
@@ -214,8 +214,8 @@ const TRANSLATIONS = {
     "System Overview": "Vue d'ensemble du systeme",
     "Fleet Management": "Gestion de flotte",
     "Deploy New Agent": "Deployer un nouvel agent",
-    "Bring Nora online like a production operator platform.":
-      "Mettez Nora en ligne comme une plateforme operateur de production.",
+    "Bring LPanel online like a production operator platform.":
+      "Mettez LPanel en ligne comme une plateforme operateur de production.",
     "Resource limits": "Limites de ressources",
     "Update password": "Mettre a jour le mot de passe",
     "Password updated successfully": "Mot de passe mis a jour",
@@ -323,7 +323,7 @@ const TRANSLATIONS = {
     Monthly: "Mensuel",
   },
   "zh-Hans": {
-    Nora: "Nora",
+    LPanel: "LPanel",
     Dashboard: "仪表板",
     "Getting Started": "入门",
     Agents: "代理",
@@ -361,7 +361,7 @@ const TRANSLATIONS = {
     "System Overview": "系统概览",
     "Fleet Management": "队伍管理",
     "Deploy New Agent": "部署新代理",
-    "Bring Nora online like a production operator platform.": "像生产操作员平台一样让 Nora 上线。",
+    "Bring LPanel online like a production operator platform.": "像生产操作员平台一样让 LPanel 上线。",
     "Resource limits": "资源限制",
     "Update password": "更新密码",
     "Password updated successfully": "密码已成功更新",
@@ -467,7 +467,7 @@ const TRANSLATIONS = {
     Monthly: "每月",
   },
   "zh-Hant": {
-    Nora: "Nora",
+    LPanel: "LPanel",
     Dashboard: "儀表板",
     "Getting Started": "入門",
     Agents: "代理",
@@ -505,7 +505,7 @@ const TRANSLATIONS = {
     "System Overview": "系統概覽",
     "Fleet Management": "隊伍管理",
     "Deploy New Agent": "部署新代理",
-    "Bring Nora online like a production operator platform.": "像生產操作員平台一樣讓 Nora 上線。",
+    "Bring LPanel online like a production operator platform.": "像生產操作員平台一樣讓 LPanel 上線。",
     "Resource limits": "資源限制",
     "Update password": "更新密碼",
     "Password updated successfully": "密碼已成功更新",
