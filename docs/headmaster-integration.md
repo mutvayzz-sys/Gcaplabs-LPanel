@@ -90,6 +90,16 @@ Nora backend (`/opt/nora/.env`):
 Nora frontend builds (both dashboards): `NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN`
 build arg — must equal `HEADMASTER_PARENT_ORIGIN`.
 
+`docker-compose.yml` passes it as a build arg for both dashboards (from the
+environment or `.env`, empty by default). Without it the embedded Runtime
+console sits on "Preparing your console". Rebuild example:
+
+```
+cd /opt/nora
+NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN=https://headmaster.gcaplabs.com \
+  docker compose build frontend-dashboard admin-dashboard
+```
+
 Headmaster site: `HEADMASTER_NORA_EMBED_ENABLED` (default off),
 `HEADMASTER_NORA_ORIGIN` (default `https://nora.gcaplabs.com`),
 `HEADMASTER_NORA_S2S_TOKEN` (same secret as Nora).
