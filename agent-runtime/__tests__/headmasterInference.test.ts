@@ -21,6 +21,7 @@ const {
   deriveHeadmasterInferenceKey,
   headmasterInferenceBaseUrl,
   headmasterInferenceContainerEnv,
+  headmasterRelayContainerEnv,
 } = headmasterInference;
 const { buildHermesRuntimeBootstrapEnv, buildHermesRuntimeConfigBootstrapCommand } =
   hermesRuntimeBootstrap;
@@ -81,6 +82,14 @@ describe("relay endpoint and credential", () => {
     expect(headmasterInferenceContainerEnv("gateway-key", {})).toEqual({
       HEADMASTER_INFERENCE_KEY: deriveHeadmasterInferenceKey("gateway-key"),
       HEADMASTER_INFERENCE_BASE_URL: HEADMASTER_INFERENCE_DEFAULT_BASE_URL,
+    });
+  });
+
+  it("injects the relay shared secret only when it is configured", () => {
+    expect(headmasterRelayContainerEnv({})).toEqual({});
+    expect(headmasterRelayContainerEnv({ HEADMASTER_RELAY_SECRET: "  " })).toEqual({});
+    expect(headmasterRelayContainerEnv({ HEADMASTER_RELAY_SECRET: " s3cret " })).toEqual({
+      HEADMASTER_RELAY_SECRET: "s3cret",
     });
   });
 });

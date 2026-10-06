@@ -18,6 +18,7 @@ const {
 } = require("../../../agent-runtime/lib/hermesDashboardAuth");
 const {
   headmasterInferenceContainerEnv,
+  headmasterRelayContainerEnv,
 } = require("../../../agent-runtime/lib/headmasterInference");
 
 const HERMES_RUNTIME_PORT = 8642;
@@ -273,6 +274,9 @@ class HermesBackend extends DockerBackend {
       // key is derived from API_SERVER_KEY, so it is inert on any install that
       // has no relay and never duplicates an operator provider key.
       ...headmasterInferenceContainerEnv(apiServerKey, process.env),
+      // Shared secret for X-Headmaster-Relay (admission sends it, Core checks it).
+      // Empty when unset, so this is a no-op until the operator configures it.
+      ...headmasterRelayContainerEnv(process.env),
       // s6 initialization runs before the managed .env is sourced. Only
       // server-owned, nonsecret memory identity belongs in the Docker env.
       ...Object.fromEntries(
