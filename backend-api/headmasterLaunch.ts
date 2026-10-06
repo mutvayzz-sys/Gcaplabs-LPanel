@@ -115,6 +115,19 @@ function httpError(statusCode, code, message) {
 let redis = null;
 let redisSubscriber = null;
 
+// Non-blocking key listing: SCAN walks the keyspace in batches instead of
+// KEYS, which blocks Redis for the whole scan.
+async function scanKeys(redis, pattern) {
+  const found = new Set();
+  let cursor = "0";
+  do {
+    const [next, batch] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 200);
+    cursor = String(next);
+    for (const key of batch || []) found.add(key);
+  } while (cursor !== "0");
+  return [...found];
+}
+
 function getRedis() {
   if (IS_TEST_ENV && !redis) {
     throw httpError(503, "storage_unavailable", "Launch storage is unavailable.");
@@ -471,7 +484,7 @@ async function revokeHeadmasterSessions({ gcapSessionId, gcapUserId, noraUserId,
     }
     // Live session records carry the GCAP binding directly; match on it so a
     // stale or re-pointed link cannot leave an orphaned session alive.
-    const keys = await redis.keys("hm:sess:*");
+    const keys = await scanKeys(redis, "hm:sess:*");
     for (const key of keys || []) {
       if (key.startsWith("hm:sess:user:")) continue;
       const raw = await redis.get(key);
@@ -673,7 +686,7 @@ function startSessionRevalidator() {
     if (!checkUrl || !isEnabled()) return;
     let active;
     try {
-      active = await getRedis().keys("hm:sess:*");
+      active = await scanKeys(getRedis(), "hm:sess:*");
     } catch {
       return; // Storage outage: fail closed paths already handle requests.
     }
@@ -809,6 +822,7 @@ async function init() {
 
 module.exports = {
   isEnabled,
+  scanKeys,
   isExactHttpsOrigin,
   assertParentOrigin,
   configuredParentOrigin,
