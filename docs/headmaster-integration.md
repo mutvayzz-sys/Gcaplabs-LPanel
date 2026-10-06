@@ -101,7 +101,7 @@ NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN=https://headmaster.gcaplabs.com \
 ```
 
 Headmaster site: `HEADMASTER_NORA_EMBED_ENABLED` (default off),
-`HEADMASTER_NORA_ORIGIN` (default `https://headmaster.gcaplabs.com`),
+`HEADMASTER_NORA_ORIGIN` (default `https://lpanel-admin.gcaplabs.com`, an unadvertised host reached only from the Headmaster admin embed),
 `HEADMASTER_NORA_S2S_TOKEN` (same secret as Nora).
 
 Identity links are provisioned explicitly (never inferred):
