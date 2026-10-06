@@ -226,7 +226,7 @@ test("launch exchange backend wiring is present and fail-closed", async () => {
   assert.match(launch, /HEADMASTER_REVALIDATE_SECONDS, 25, 10, 30/, "revalidation bound <= 30s");
   assert.match(
     launch,
-    /HEADMASTER_SESSION_TTL_SECONDS, 12 \* 60 \* 60/,
+    /HEADMASTER_SESSION_TTL_SECONDS,\s*12 \* 60 \* 60/,
     "hm session lifetime is capped (bounded staleness)",
   );
   assert.match(
@@ -285,6 +285,7 @@ test("compose threads the parent origin into both dashboard builds", async () =>
       `${app}: compose build arg present`,
     );
   }
+});
 
 test("no visible \"Nora\" string in either dashboard", async () => {
   const { readdir } = await import("node:fs/promises");
