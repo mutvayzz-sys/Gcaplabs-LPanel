@@ -30,6 +30,17 @@ describe("internal account deletion", () => {
     await request(app({ deps: deps(null) })).post("/internal/relay-usage").send({ ownerId: OWNER }).expect(401);
   });
 
+  test("rejects a configured secret shorter than 32 chars even when it matches", async () => {
+    const short = "s".repeat(31);
+    const a = express(); a.use("/internal", buildRouter({ env: { HEADMASTER_ACCOUNT_DELETION_SECRET: short } }));
+    await request(a).post("/internal/relay-usage").set("x-headmaster-internal-secret", short).send({ ownerId: OWNER }).expect(401);
+  });
+
+  test("rejects a wrong secret of the right length", async () => {
+    await request(app({ deps: deps(null) })).post("/internal/relay-usage")
+      .set("x-headmaster-internal-secret", "t".repeat(40)).send({ ownerId: OWNER }).expect(401);
+  });
+
   test("503 when the secret is not configured", async () => {
     const a = express(); a.use("/internal", buildRouter({ env: {} }));
     await request(a).post("/internal/relay-usage").set("x-headmaster-internal-secret", SECRET).expect(503);

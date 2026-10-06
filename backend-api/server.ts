@@ -1284,6 +1284,15 @@ app.use(gatewayUIAssetProxy);
 // ─── Public Agent Hub Catalog ─────────────────────────────────────
 app.use("/agent-hub", require("./routes/agentHubPublic"));
 
+// ─── Headmaster account deletion (server-to-server) ───────────────
+// Account API -> platform, guarded only by the x-headmaster-internal-secret
+// header (HEADMASTER_ACCOUNT_DELETION_SECRET, constant-time compared, >= 32
+// chars, unset = 503). It must sit before the auth wall, which would otherwise
+// 401 the caller for lacking a user session, and before the broader
+// /internal/headmaster router, which 404s everything when the S2S launch
+// exchange is not configured.
+app.use("/internal/headmaster/account-deletion", require("./routes/internalAccountDeletion"));
+
 // ─── Headmaster S2S launch exchange ───────────────────────────────
 // Bearer-token server-to-server surface for the Headmaster site. Reachable
 // publicly as /api/internal/headmaster/* through the reverse proxy's existing
@@ -1335,8 +1344,6 @@ app.use("/billing", require("./routes/billing"));
 // god view.
 app.use("/admin/fleet/migrations", require("./routes/fleetMigrations"));
 app.use("/admin/account-deletions", require("./routes/adminAccountDeletions"));
-// Account API -> platform, shared-secret only (never exposed through the public proxy).
-app.use("/internal/headmaster/account-deletion", require("./routes/internalAccountDeletion"));
 app.use("/admin", require("./routes/adminMembers"));
 app.use("/admin", require("./routes/admin"));
 
