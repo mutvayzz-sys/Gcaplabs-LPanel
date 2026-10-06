@@ -55,6 +55,9 @@ services:
     build:
       context: .
       dockerfile: frontend-dashboard/Dockerfile
+      args:
+        # Baked into the Next.js bundle; empty keeps same-origin-only framing.
+        NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN: ${NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN:-}
     working_dir: /app
     volumes:
       - ./frontend-dashboard:/app
@@ -68,6 +71,9 @@ services:
     build:
       context: .
       dockerfile: admin-dashboard/Dockerfile
+      args:
+        # Baked into the Next.js bundle; empty keeps same-origin-only framing.
+        NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN: ${NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN:-}
     working_dir: /app
     volumes:
       - ./admin-dashboard:/app

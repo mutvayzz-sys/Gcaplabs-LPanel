@@ -274,3 +274,15 @@ test("launch exchange backend wiring is present and fail-closed", async () => {
     );
   }
 });
+
+test("compose threads the parent origin into both dashboard builds", async () => {
+  const compose = await read("docker-compose.yml");
+  for (const app of ["frontend-dashboard", "admin-dashboard"]) {
+    const block = compose.split(new RegExp(`^  ${app}:\\n`, "m"))[1]?.split(/^  \S/m)[0] ?? "";
+    assert.match(
+      block,
+      /args:\s*\n(?:\s*#.*\n)*\s*NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN: \$\{NEXT_PUBLIC_HEADMASTER_PARENT_ORIGIN:-\}/,
+      `${app}: compose build arg present`,
+    );
+  }
+});
