@@ -113,7 +113,9 @@ test("public signup destinations are all enclosed by SignupGate", () => {
     gatedDataDrivenDestination?: RegExp;
   }> = [
     { name: "index.tsx", expectedCount: 5, destination: String.raw`\{DEMO_SIGNUP_PATH\}` },
-    { name: "login.tsx", expectedCount: 2, destination: '"/signup"' },
+    // Headmaster: the sign-in page has no signup links at all (public signup
+    // is off and nginx does not serve /signup).
+    { name: "login.tsx", expectedCount: 0, destination: '"/signup"' },
     {
       name: "pricing.tsx",
       expectedCount: 3,
@@ -162,13 +164,11 @@ test("public signup destinations are all enclosed by SignupGate", () => {
   }
 });
 
-test("public login gates the signup lead-in together with its link", () => {
+test("Headmaster sign-in page links to no signup, upstream repo, or quick start", () => {
   const source = readFileSync(path.join(process.cwd(), "pages", "login.tsx"), "utf8");
 
-  assert.match(
-    source,
-    /<SignupGate>\s*<p>\s*Need an account\?\{" "\}\s*<Link\s+href="\/signup"[\s\S]*?<\/Link>\s*<\/p>\s*<\/SignupGate>/,
-  );
+  assert.doesNotMatch(source, /\/signup|SignupGate|solomon2773|QUICKSTART/);
+  assert.doesNotMatch(source, /\b(Nora|Hermes|OpenClaw)\b/);
 });
 
 test("public signup page has an explicit disabled-registration branch", () => {
