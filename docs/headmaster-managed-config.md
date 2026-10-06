@@ -39,10 +39,10 @@ interrupted API process, so it cannot strand the bridge in an in-progress state.
 ## Model provider: the Headmaster relay, never operator keys
 
 A Headmaster-managed Hermes agent (external namespace `headmaster`) gets one
-built-in model provider named `headmaster`, with three fixed tiers: Lite, Pro and
-Max (`headmaster-lite`, `headmaster-pro`, `headmaster-max`; default Lite). It
+built-in model provider named `headmaster`, with two fixed tiers: Lite and Pro
+(`headmaster-lite`, `headmaster-pro`; default Lite). It
 registers as a `providers.headmaster` entry with `discover_models: false`, so a
-fresh Cloud model picker shows exactly those three rows.
+fresh Cloud model picker shows exactly those two rows.
 
 - Nora never copies operator provider keys, provider base-url overrides or a
   persisted `NORA_HERMES_MODEL_CONFIG_B64` into these containers. Both

@@ -1334,6 +1334,7 @@ app.use("/billing", require("./routes/billing"));
 // guard is redundant but harmless). Same pattern for the platform-admin RBAC
 // god view.
 app.use("/admin/fleet/migrations", require("./routes/fleetMigrations"));
+app.use("/admin/account-deletions", require("./routes/adminAccountDeletions"));
 // Account API -> platform, shared-secret only (never exposed through the public proxy).
 app.use("/internal/headmaster/account-deletion", require("./routes/internalAccountDeletion"));
 app.use("/admin", require("./routes/adminMembers"));

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, LayoutDashboard, Loader2, Maximize2, RefreshCw } from "lucide-react";
 
 const DASHBOARD_BOOT_MESSAGE =
-  "Fresh Hermes deployments can take a couple of minutes while the official dashboard boots.";
+  "Fresh Headmaster deployments can take a couple of minutes while the official dashboard boots.";
 
 export default function OfficialDashboardPanel({
   agentId,
@@ -73,7 +73,7 @@ export default function OfficialDashboardPanel({
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 flex flex-col items-center gap-3">
         <AlertTriangle size={32} className="text-amber-500" />
-        <p className="text-sm font-bold text-slate-700">Official Hermes dashboard unavailable</p>
+        <p className="text-sm font-bold text-slate-700">Official Headmaster dashboard unavailable</p>
         <p className="text-xs text-slate-500">{runtimeError}</p>
         <button
           onClick={handleRefresh}
@@ -95,7 +95,7 @@ export default function OfficialDashboardPanel({
             }`}
           />
           <span className="text-xs font-mono text-slate-400 truncate">
-            {dashboardInfo?.url || "Hermes dashboard"} &middot; Port {dashboardInfo?.port || "9119"}
+            {dashboardInfo?.url || "Headmaster dashboard"} &middot; Port {dashboardInfo?.port || "9119"}
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -110,7 +110,7 @@ export default function OfficialDashboardPanel({
             onClick={openInNewWindow}
             disabled={!embedUrl}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
-            title="Open the official Hermes dashboard in a new window"
+            title="Open the official Headmaster dashboard in a new window"
           >
             <Maximize2 size={12} />
             New Window
@@ -126,8 +126,8 @@ export default function OfficialDashboardPanel({
               <div className="space-y-1 text-center px-6">
                 <p className="text-xs text-slate-400">
                   {dashboardReady
-                    ? "Connecting to official Hermes dashboard..."
-                    : "Preparing official Hermes dashboard..."}
+                    ? "Connecting to official Headmaster dashboard..."
+                    : "Preparing official Headmaster dashboard..."}
                 </p>
                 {!dashboardReady && (
                   <p className="text-[11px] text-slate-500 max-w-md">
@@ -145,7 +145,7 @@ export default function OfficialDashboardPanel({
             src={embedUrl}
             className="w-full h-full border-0"
             allow="clipboard-write"
-            title={`Hermes Dashboard ${agentId}`}
+            title={`Headmaster Dashboard ${agentId}`}
             onLoad={() => setIframeLoaded(true)}
           />
         ) : (
@@ -155,7 +155,7 @@ export default function OfficialDashboardPanel({
             ) : (
               <div className="flex flex-col items-center gap-2">
                 <LayoutDashboard size={18} className="text-slate-600" />
-                <span>Waiting for the official Hermes dashboard to become ready.</span>
+                <span>Waiting for the official Headmaster dashboard to become ready.</span>
               </div>
             )}
           </div>

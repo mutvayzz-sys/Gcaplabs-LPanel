@@ -77,8 +77,8 @@ function buildLanguageForm(settings) {
 
 function formatShareTargetLabel(value) {
   if (value === "internal") return "Internal users only";
-  if (value === "community") return "Nora community only";
-  return "Internal users and Nora community";
+  if (value === "community") return "Public community only";
+  return "Internal users and public community";
 }
 
 function formatRamLabel(ramMb) {
@@ -685,7 +685,7 @@ export default function AdminSettingsPage() {
                     Upgrade status and paths
                   </h2>
                   <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-500">
-                    Track the running Nora build, review the latest announced release, start an
+                    Track the running build, review the latest announced release, start an
                     opt-in background upgrade when configured, or copy the host-side manual command.
                   </p>
                 </div>
@@ -759,7 +759,7 @@ export default function AdminSettingsPage() {
                         Direct GitHub Upgrade
                       </p>
                       <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-                        Starts a temporary Docker runner that fetches Nora from GitHub and keeps
+                        Starts a temporary Docker runner that fetches the configured upgrade source from GitHub and keeps
                         progress visible while the stack rebuilds in the background.
                       </p>
                     </div>
@@ -957,7 +957,7 @@ export default function AdminSettingsPage() {
                         Manual Host Command
                       </p>
                       <p className="mt-2 text-sm font-medium text-slate-300">
-                        Run this from the Nora repo root on the host machine.
+                        Run this from the repo root on the host machine.
                       </p>
                     </div>
 
@@ -1084,7 +1084,7 @@ export default function AdminSettingsPage() {
                   </p>
                   <p className="mt-1 text-sm font-medium leading-relaxed text-amber-800/80">
                     Set <code>NORA_SYSTEM_BANNER_ENABLED=true</code> in <code>.env</code> and
-                    restart Nora. You can still save the draft below before you flip the flag.
+                    restart the control plane. You can still save the draft below before you flip the flag.
                   </p>
                 </div>
               ) : null}
@@ -1167,7 +1167,7 @@ export default function AdminSettingsPage() {
                       maxLength={600}
                       value={bannerForm.message}
                       onChange={(event) => updateBannerField("message", event.target.value)}
-                      placeholder="This Nora control plane is a staging environment. Expect resets and avoid production workloads."
+                      placeholder="This control plane is a staging environment. Expect resets and avoid production workloads."
                       className="mt-3 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium leading-relaxed text-slate-900 outline-none focus:border-red-300"
                     />
                   </label>
@@ -1302,9 +1302,9 @@ export default function AdminSettingsPage() {
                       }
                       className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-red-300"
                     >
-                      <option value="both">Internal users and Nora community</option>
+                      <option value="both">Internal users and public community</option>
                       <option value="internal">Internal users only</option>
-                      <option value="community">Nora community only</option>
+                      <option value="community">Public community only</option>
                     </select>
                   </label>
 

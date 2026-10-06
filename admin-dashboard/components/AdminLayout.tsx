@@ -16,6 +16,7 @@ import {
   TriangleAlert,
   Users,
   UsersRound,
+  UserX,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { formatDateTime } from "../lib/format";
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { name: "Remote Hosts", icon: Server, href: "/remote-hosts" },
   { name: "Agent Hub", icon: ShoppingBag, href: "/agent-hub" },
   { name: "Backups", icon: Archive, href: "/backups" },
+  { name: "Account deletions", icon: UserX, href: "/account-deletions" },
   { name: "Audit", icon: FileText, href: "/audit" },
   { name: "Settings", icon: SlidersHorizontal, href: "/settings" },
 ];
@@ -101,7 +103,12 @@ export default function AdminLayout({ children }) {
       });
   }
 
-  const showReleaseBanner = Boolean(release?.updateAvailable);
+  // Headmaster: the release banner tracks upstream Nora releases and nudges
+  // admins toward an upgrade that would replace the fork, so it stays hidden.
+  // Flip only once release tracking points at the Headmaster fork.
+  const HEADMASTER_RELEASE_BANNER_ENABLED = false;
+  const showReleaseBanner =
+    HEADMASTER_RELEASE_BANNER_ENABLED && Boolean(release?.updateAvailable);
   const bannerIsCritical = release?.severity === "critical" || release?.upgradeRequired;
   const showSystemBanner = Boolean(
     systemBanner?.active && systemBanner?.title && systemBanner?.message,
@@ -246,12 +253,12 @@ export default function AdminLayout({ children }) {
                         bannerIsCritical ? "text-red-600" : "text-amber-700",
                       )}
                     >
-                      {bannerIsCritical ? t("Upgrade Required") : t("New Nora Version Available")}
+                      {bannerIsCritical ? t("Upgrade Required") : t("New Version Available")}
                     </p>
                     <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950">
                       {release?.latestVersion
                         ? `${formatVersionLabel(release.latestVersion)} is ready`
-                        : t("A newer Nora release is available")}
+                        : t("A newer release is available")}
                     </h2>
                     <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-700">
                       {release?.currentVersion

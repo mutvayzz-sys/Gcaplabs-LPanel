@@ -162,7 +162,8 @@ beforeEach(() => {
   process.env.OAUTH_LOGIN_ENABLED = "false";
   process.env.PLATFORM_MODE = "selfhosted";
   process.env.GOOGLE_CLIENT_ID = "google-client-id";
-  delete process.env.SIGNUP_ENABLED;
+  // Signup fails closed when unset, so the signup-path tests opt in explicitly.
+  process.env.SIGNUP_ENABLED = "true";
   delete process.env.SIGNUP_BOT_PROTECTION_PROVIDER;
   delete process.env.NEXT_PUBLIC_SIGNUP_BOT_PROTECTION_PROVIDER;
   delete process.env.SIGNUP_TURNSTILE_SECRET;
@@ -230,12 +231,15 @@ describe("auth rate limit configuration", () => {
 });
 
 describe("password signup availability configuration", () => {
-  it("defaults absent or blank values to enabled", () => {
+  it("fails closed: absent or blank values mean disabled", () => {
     delete process.env.SIGNUP_ENABLED;
-    expect(authRouteTestHelpers.isSignupEnabled()).toBe(true);
+    expect(authRouteTestHelpers.isSignupEnabled()).toBe(false);
+
+    process.env.SIGNUP_ENABLED = "";
+    expect(authRouteTestHelpers.isSignupEnabled()).toBe(false);
 
     process.env.SIGNUP_ENABLED = "   ";
-    expect(authRouteTestHelpers.isSignupEnabled()).toBe(true);
+    expect(authRouteTestHelpers.isSignupEnabled()).toBe(false);
   });
 
   it.each(["true", "1", "YES", " on "])("enables password signup for %p", (value) => {
@@ -282,7 +286,7 @@ describe("POST /auth/signup", () => {
 
       expect(res.status).toBe(403);
       expect(res.body).toEqual({
-        error: "Registration is disabled by this Nora operator.",
+        error: "Registration is disabled on this Headmaster control panel. Ask an admin for an invitation.",
         code: "SIGNUP_DISABLED",
       });
       expect(hashSpy).not.toHaveBeenCalled();
@@ -298,7 +302,7 @@ describe("POST /auth/signup", () => {
     const ip = "198.51.100.251";
     const hashSpy = jest.spyOn(bcrypt, "hash");
     const disabledResponse = {
-      error: "Registration is disabled by this Nora operator.",
+      error: "Registration is disabled on this Headmaster control panel. Ask an admin for an invitation.",
       code: "SIGNUP_DISABLED",
     };
 
@@ -1239,7 +1243,7 @@ describe("OAuth hardening", () => {
 
     expect(res.status).toBe(403);
     expect(res.body).toEqual({
-      error: "Registration is disabled by this Nora operator.",
+      error: "Registration is disabled on this Headmaster control panel. Ask an admin for an invitation.",
       code: "SIGNUP_DISABLED",
     });
     expect(

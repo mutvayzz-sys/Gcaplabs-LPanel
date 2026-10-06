@@ -22,12 +22,12 @@ export default function RemoteHostsAvailability({ mode }: { mode: PlatformMode }
         Credentials unavailable
       </p>
       <h1 className="mt-2 text-2xl font-black tracking-tight text-brand-ink">
-        {hosted ? "Platform hosts require self-hosted Nora" : "Platform mode is unverified"}
+        {hosted ? "Platform hosts require a self-hosted control plane" : "Platform mode is unverified"}
       </h1>
       <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
         {hosted
-          ? "Hosted Nora does not accept or use customer SSH credentials. Run Nora on infrastructure you control before registering a platform-managed Remote Docker host."
-          : "Nora could not verify this installation as self-hosted. Credential fields and every Remote Host mutation remain hidden until the public platform configuration endpoint reports selfhosted mode."}
+          ? "This hosted control plane does not accept or use customer SSH credentials. Run the control plane on infrastructure you control before registering a platform-managed Remote Docker host."
+          : "The control plane could not verify this installation as self-hosted. Credential fields and every Remote Host mutation remain hidden until the public platform configuration endpoint reports selfhosted mode."}
       </p>
       <a
         href={REMOTE_DOCKER_GUIDE_URL}

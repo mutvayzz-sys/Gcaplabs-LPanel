@@ -17,7 +17,8 @@ set -euo pipefail
 
 ENV_FILE=".env"
 ENV_BACKUP_FILE=""
-NORA_GITHUB_REPO_SLUG="solomon2773/nora"
+# Headmaster: empty so the admin panel never polls upstream Nora releases.
+NORA_GITHUB_REPO_SLUG=""
 PUBLIC_NGINX_TEMPLATE="infra/nginx_public.conf.template"
 TLS_NGINX_TEMPLATE="infra/nginx_tls.conf"
 PUBLIC_PROD_COMPOSE_OVERRIDE_TEMPLATE="infra/docker-compose.public-prod.yml"
@@ -814,7 +815,7 @@ ensure_signup_protection_env() {
   local signup_enabled burst_max burst_window daily_max daily_window provider turnstile_site_key
   local turnstile_secret recaptcha_site_key recaptcha_secret
 
-  signup_enabled="$(read_env_value "$env_path" "SIGNUP_ENABLED" "true")"
+  signup_enabled="$(read_env_value "$env_path" "SIGNUP_ENABLED" "false")"
   burst_max="$(read_env_value "$env_path" "SIGNUP_RATE_LIMIT_BURST_MAX" "5")"
   burst_window="$(read_env_value "$env_path" "SIGNUP_RATE_LIMIT_BURST_WINDOW_MS" "600000")"
   daily_max="$(read_env_value "$env_path" "SIGNUP_RATE_LIMIT_DAILY_MAX" "20")"
@@ -1844,9 +1845,17 @@ fi
 
 # ── Bootstrap Admin Account ──────────────────────────────────
 
+# Headmaster: public signup ships disabled (SIGNUP_ENABLED=false), so there is
+# no first-account claim page. The first admin is created explicitly here
+# (or via DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD in .env).
+BOOTSTRAP_SIGNUP_ENABLED="$(read_env_value "$ENV_FILE" "SIGNUP_ENABLED" "false")"
+
 if [ "$PLATFORM_MODE" = "paas" ]; then
   header "Bootstrap Admin Account (Required for PaaS)"
   printf "  Hosted PaaS requires an explicit bootstrap administrator.\n"
+elif [ "$BOOTSTRAP_SIGNUP_ENABLED" != "true" ]; then
+  header "Bootstrap Admin Account (Required)"
+  printf "  Public signup is disabled, so the first admin must be created here.\n"
 else
   header "Bootstrap Admin Account (Optional)"
   printf "  Leave both fields blank to claim the first admin after boot.\n"
@@ -1864,6 +1873,10 @@ while true; do
   if [ -z "$admin_email_input" ] && [ -z "$admin_pass_input" ]; then
     if [ "$PLATFORM_MODE" = "paas" ]; then
       warn "Hosted PaaS cannot expose first-account admin claim. Configure the bootstrap administrator."
+      continue
+    fi
+    if [ "$BOOTSTRAP_SIGNUP_ENABLED" != "true" ]; then
+      warn "Public signup is disabled (SIGNUP_ENABLED=false). Configure the bootstrap administrator."
       continue
     fi
     DEFAULT_ADMIN_EMAIL=""
@@ -1991,7 +2004,7 @@ REDIS_TLS_KEY="$(read_env_value "$ENV_FILE" "REDIS_TLS_KEY" "")"
 REDIS_TLS_KEY_FILE="$(read_env_value "$ENV_FILE" "REDIS_TLS_KEY_FILE" "")"
 REDIS_TLS_INSECURE_SKIP_VERIFY="$(read_env_value "$ENV_FILE" "REDIS_TLS_INSECURE_SKIP_VERIFY" "false")"
 REDIS_CONNECT_TIMEOUT_MS="$(read_env_value "$ENV_FILE" "REDIS_CONNECT_TIMEOUT_MS" "10000")"
-SIGNUP_ENABLED="$(read_env_value "$ENV_FILE" "SIGNUP_ENABLED" "true")"
+SIGNUP_ENABLED="$(read_env_value "$ENV_FILE" "SIGNUP_ENABLED" "false")"
 SIGNUP_RATE_LIMIT_BURST_MAX="$(read_env_value "$ENV_FILE" "SIGNUP_RATE_LIMIT_BURST_MAX" "5")"
 SIGNUP_RATE_LIMIT_BURST_WINDOW_MS="$(read_env_value "$ENV_FILE" "SIGNUP_RATE_LIMIT_BURST_WINDOW_MS" "600000")"
 SIGNUP_RATE_LIMIT_DAILY_MAX="$(read_env_value "$ENV_FILE" "SIGNUP_RATE_LIMIT_DAILY_MAX" "20")"
@@ -2157,6 +2170,9 @@ NORA_LATEST_PUBLISHED_AT=
 NORA_RELEASE_NOTES_URL=
 NORA_LATEST_SEVERITY=warning
 NORA_UPGRADE_REQUIRED=false
+# Headmaster: keep this false. Enabling it lets Admin Settings run a one-click
+# upgrade that checks out upstream Nora (NORA_UPGRADE_REPO) over this checkout,
+# replacing the Headmaster fork. Upgrade the fork via git + PR instead.
 NORA_AUTO_UPGRADE_ENABLED=false
 NORA_HOST_REPO_DIR=$(pwd)
 # Direct upgrades fetch this public HTTPS repo. Do not include credentials.

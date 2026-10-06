@@ -378,7 +378,7 @@ test("an owner with no assignment row gets the configured default; an explicit r
   const absent = makeResolverWithDefault(async () => jsonResponse([]), DEFAULT_ASSIGNMENT);
   assert.deepEqual(await absent.resolveAssignment(OWNER), {
     ...DEFAULT_ASSIGNMENT,
-    tier: "headmaster-lite",
+    tiers: ["headmaster-lite", "headmaster-pro"],
   });
 
   const explicit = makeResolverWithDefault(
