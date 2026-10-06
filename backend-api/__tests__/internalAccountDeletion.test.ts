@@ -69,6 +69,28 @@ describe("internal account deletion", () => {
     expect(fetchImpl.mock.calls[0][1].method).toBe("DELETE");
   });
 
+  test("memory bank: a Headmaster bank sends the gateway key and its owner header", async () => {
+    const fetchImpl = jest.fn(async () => ({ ok: true, status: 200 }));
+    const a = express();
+    a.use("/internal", buildRouter({
+      env: { HEADMASTER_ACCOUNT_DELETION_SECRET: SECRET, HINDSIGHT_API_URL: "http://hindsight.test/", HINDSIGHT_API_KEY: "g".repeat(40) },
+      deps: deps(null), fetchImpl,
+    }));
+    const bankId = `hermes-u-${OWNER.replace(/-/g, "_")}`;
+    const res = await request(a).post("/internal/memory-bank")
+      .set("x-headmaster-internal-secret", SECRET).send({ bankId }).expect(200);
+    expect(res.body).toEqual({ done: true, existed: true });
+    expect(fetchImpl.mock.calls[0][0]).toBe(`http://hindsight.test/v1/default/banks/${bankId}`);
+    expect(fetchImpl.mock.calls[0][1].headers).toEqual({ authorization: `Bearer ${"g".repeat(40)}`, "x-headmaster-owner-id": OWNER });
+  });
+
+  test("memory bank: a Hindsight auth failure is reported, not counted as done", async () => {
+    const fetchImpl = jest.fn(async () => ({ ok: false, status: 401 }));
+    const res = await request(app({ deps: deps(null), fetchImpl })).post("/internal/memory-bank")
+      .set("x-headmaster-internal-secret", SECRET).send({ bankId: `hermes-u-${OWNER.replace(/-/g, "_")}` }).expect(502);
+    expect(res.body.error).toBe("hindsight_delete_failed");
+  });
+
   test("relay usage: SCANs both prefixes and deletes owner keys", async () => {
     const redis = {
       scan: jest.fn(async (_c, _m, pattern) => ["0", pattern.startsWith("headmaster-inference:") ? [`headmaster-inference:${OWNER}:day`] : []]),

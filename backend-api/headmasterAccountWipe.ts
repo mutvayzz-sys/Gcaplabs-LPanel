@@ -39,12 +39,25 @@ async function wipeCloudRuntime(agentId, deps) {
   }
 }
 
-/** DELETE the bank on the Hindsight API (HINDSIGHT_API_URL, optional HINDSIGHT_API_KEY). */
+/** Owner UUID of a Headmaster bank id (`hermes-u-<owner uuid with _>`), else null. */
+function ownerIdForBank(bankId) {
+  const m = /^hermes-u-([0-9a-f]{8})_([0-9a-f]{4})_([0-9a-f]{4})_([0-9a-f]{4})_([0-9a-f]{12})$/i.exec(String(bankId || ""));
+  return m ? m.slice(1).join("-").toLowerCase() : null;
+}
+
+/**
+ * DELETE the bank on the Hindsight API (HINDSIGHT_API_URL, optional HINDSIGHT_API_KEY).
+ * Headmaster's Hindsight runs the tenant extension: it needs the gateway key as the
+ * bearer plus `x-headmaster-owner-id` to pick the owner's schema, so a Headmaster
+ * bank (`hermes-u-...`) also sends that header.
+ */
 async function deleteMemoryBank(bankId, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
   if (!BANK_RE.test(String(bankId || ""))) throw Object.assign(new Error("bank_invalid"), { statusCode: 400 });
   const base = String(env.HINDSIGHT_API_URL || "").replace(/\/+$/, "");
   if (!base) throw Object.assign(new Error("hindsight_not_configured"), { statusCode: 503 });
   const headers = env.HINDSIGHT_API_KEY ? { authorization: `Bearer ${env.HINDSIGHT_API_KEY}` } : {};
+  const ownerId = ownerIdForBank(bankId);
+  if (ownerId) headers["x-headmaster-owner-id"] = ownerId;
   const res = await fetchImpl(`${base}/v1/default/banks/${encodeURIComponent(bankId)}`, { method: "DELETE", headers });
   if (res.ok || res.status === 404) return { done: true, existed: res.status !== 404 };
   throw Object.assign(new Error("hindsight_delete_failed"), { statusCode: 502 });
@@ -65,4 +78,4 @@ async function clearRelayUsage(ownerId, redis) {
   return { done: true, removed };
 }
 
-module.exports = { secretMatches, wipeCloudRuntime, deleteMemoryBank, clearRelayUsage, RELAY_PREFIXES };
+module.exports = { secretMatches, wipeCloudRuntime, deleteMemoryBank, clearRelayUsage, ownerIdForBank, RELAY_PREFIXES };
