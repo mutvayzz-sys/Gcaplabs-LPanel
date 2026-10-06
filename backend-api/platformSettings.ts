@@ -52,7 +52,7 @@ const DEFAULT_SMTP_SETTINGS = Object.freeze({
   smtpUsername: "",
   smtpPasswordEncrypted: null,
   smtpFromAddress: "",
-  smtpFromName: "Nora",
+  smtpFromName: "Headmaster",
 });
 
 const BACKUP_PLAN_KEYS = Object.freeze(["free", "pro", "enterprise"]);
