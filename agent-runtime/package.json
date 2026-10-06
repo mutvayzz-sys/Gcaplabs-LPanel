@@ -15,8 +15,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "tsx": "^4.23.13",
-    "sanitize-html": "2.17.5"
+    "sanitize-html": "2.18.0",
+    "tsx": "^4.23.13"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",
