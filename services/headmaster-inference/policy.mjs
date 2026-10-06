@@ -64,6 +64,8 @@ const PROVIDER_ENDPOINTS = Object.freeze({
   zai: { baseUrl: "https://api.z.ai/api/paas/v4", hosts: ["api.z.ai"] },
   nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", hosts: ["integrate.api.nvidia.com"] },
   openrouter: { baseUrl: "https://openrouter.ai/api/v1", hosts: ["openrouter.ai"] },
+  // Personal keys only (no operator coverage). Anthropic's OpenAI-compatible endpoint.
+  anthropic: { baseUrl: "https://api.anthropic.com/v1", hosts: ["api.anthropic.com"] },
 });
 
 const CLIENT_AUTHORITY_FIELDS = new Set([

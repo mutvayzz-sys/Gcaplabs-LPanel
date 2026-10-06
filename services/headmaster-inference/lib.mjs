@@ -811,6 +811,8 @@ export function createInferenceService({
         signal: controller.signal,
         headers: {
           authorization: `Bearer ${apiKey}`,
+          // Anthropic's /v1/models only accepts its native key header.
+          ...(provider === "anthropic" ? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" } : {}),
           accept: streaming ? "text/event-stream" : "application/json",
           "x-request-id": requestId,
           ...(isModels ? {} : { "content-type": "application/json" }),
