@@ -2152,13 +2152,13 @@ router.post("/deploy", async (req, res) => {
     const runtimeFamily = normalizeRequestedRuntimeFamily(requestedRuntimeFamily);
     if (requestBody.runtime_family != null && runtimeFamily == null) {
       return res.status(400).json({
-        error: `Unsupported runtime_family. Nora currently supports: ${KNOWN_RUNTIME_FAMILIES.map((value) => `"${value}"`).join(", ")}.`,
+        error: `Unsupported runtime_family. Supported values: ${KNOWN_RUNTIME_FAMILIES.map((value) => `"${value}"`).join(", ")}.`,
       });
     }
     const name = sanitizeAgentName(
       requestBody.name,
       migrationDraft?.manifest?.name ||
-        (migrationDraft?.manifest?.runtimeFamily === "hermes" ? "Hermes-Agent" : "OpenClaw-Agent"),
+        (migrationDraft?.manifest?.runtimeFamily === "hermes" ? "Headmaster" : "OpenClaw-Agent"),
     );
     if (name.length > 100)
       return res.status(400).json({ error: "Agent name must be 100 characters or less" });
@@ -2376,12 +2376,12 @@ router.post("/adopt", async (req, res) => {
     const runtimeFamily = normalizeRequestedRuntimeFamily(body.runtime_family);
     if (runtimeFamily == null) {
       return res.status(400).json({
-        error: `Unsupported runtime_family. Nora currently supports: ${KNOWN_RUNTIME_FAMILIES.map((v) => `"${v}"`).join(", ")}.`,
+        error: `Unsupported runtime_family. Supported values: ${KNOWN_RUNTIME_FAMILIES.map((v) => `"${v}"`).join(", ")}.`,
       });
     }
     const name = sanitizeAgentName(
       body.name,
-      runtimeFamily === "hermes" ? "Hermes-Agent" : "OpenClaw-Agent",
+      runtimeFamily === "hermes" ? "Headmaster" : "OpenClaw-Agent",
     );
     if (name.length > 100) {
       return res.status(400).json({ error: "Agent name must be 100 characters or less" });
@@ -2657,7 +2657,7 @@ router.post(
     const runtimeFamily = normalizeRequestedRuntimeFamily(requestBody.runtime_family);
     if (requestBody.runtime_family != null && runtimeFamily == null) {
       return res.status(400).json({
-        error: `Unsupported runtime_family. Nora currently supports: ${KNOWN_RUNTIME_FAMILIES.map((value) => `"${value}"`).join(", ")}.`,
+        error: `Unsupported runtime_family. Supported values: ${KNOWN_RUNTIME_FAMILIES.map((value) => `"${value}"`).join(", ")}.`,
       });
     }
     const name = sanitizeAgentName(
@@ -3058,7 +3058,7 @@ router.post("/:id/redeploy", async (req, res) => {
     const runtimeFamily = normalizeRequestedRuntimeFamily(requestBody.runtime_family);
     if (requestBody.runtime_family != null && runtimeFamily == null) {
       return res.status(400).json({
-        error: `Unsupported runtime_family. Nora currently supports: ${KNOWN_RUNTIME_FAMILIES.map((value) => `"${value}"`).join(", ")}.`,
+        error: `Unsupported runtime_family. Supported values: ${KNOWN_RUNTIME_FAMILIES.map((value) => `"${value}"`).join(", ")}.`,
       });
     }
 

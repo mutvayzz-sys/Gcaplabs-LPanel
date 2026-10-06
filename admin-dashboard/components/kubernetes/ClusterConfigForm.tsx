@@ -232,7 +232,7 @@ export default function ClusterConfigForm({
             placeholder={form.namespace}
           />
         </Field>
-        <Field label="Hermes namespace">
+        <Field label="Headmaster runtime namespace">
           <input
             value={form.hermesNamespace}
             onChange={(event) => onFieldChange("hermesNamespace", event.target.value)}

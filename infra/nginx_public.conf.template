@@ -53,8 +53,8 @@ http {
     limit_req_zone $binary_remote_addr zone=api_limit:10m rate=30r/s;
     limit_req_status 429;
 
-    # Marketing-only browser policy and homepage edge-cache eligibility. Empty
-    # map values suppress these headers on APIs, dashboards, and Next assets.
+    # Sign-in page browser policy. Empty map values suppress these headers on
+    # APIs, dashboards, and Next assets. No page is edge-cache eligible.
     map $uri $marketing_content_security_policy {
         default "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; frame-src https://challenges.cloudflare.com https://www.google.com https://recaptcha.google.com; worker-src 'self' blob:; media-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
         ~^/(api|app|admin)(/|$) "";
@@ -63,14 +63,10 @@ http {
 
     map $uri $marketing_cache_control {
         default "";
-        "/" "public, max-age=0, s-maxage=300, stale-while-revalidate=60";
     }
 
-    # Keep browser revalidation strict while giving Cloudflare an explicit,
-    # homepage-only shared-cache lifetime once the Cache Rule makes HTML eligible.
     map $uri $marketing_cloudflare_cache_control {
         default "";
-        "/" "public, max-age=300, stale-while-revalidate=60";
     }
 
     # Marketing pages must not be framed. Authenticated dashboards remain
@@ -243,15 +239,33 @@ http {
             proxy_set_header Connection $connection_upgrade;
         }
 
-        # 4. Marketing Pages (Root)
+        # 4. Headmaster: the upstream Nora marketing site is NOT served.
+        # Only the control-panel sign-in page, its OAuth hand-off and the
+        # icons it needs are proxied to frontend-marketing. `/` goes straight
+        # to sign-in; every other public route (/signup, /pricing, /privacy,
+        # /terms, localized variants, sitemap) is a plain 404. The first admin
+        # is created explicitly by the operator (setup script), never through
+        # a public signup page.
         location = / {
-            proxy_hide_header Cache-Control;
+            return 302 /login$is_args$args;
+        }
+
+        location = /robots.txt {
+            default_type text/plain;
+            return 200 "User-agent: *\nDisallow: /\n";
+        }
+
+        location ~ ^/(?:(?:en|es|fr|zh-Hans|zh-Hant)/)?(?:login/?|auth/.+)$ {
             proxy_hide_header Strict-Transport-Security;
             proxy_pass $marketing_site;
         }
 
-        location / {
+        location ~ ^/(?:favicon\.ico|favicon-(?:16x16|32x32)\.png|apple-touch-icon\.png|icon-(?:192|512)\.png|site\.webmanifest)$ {
             proxy_pass $marketing_site;
+        }
+
+        location / {
+            return 404;
         }
     }
 }

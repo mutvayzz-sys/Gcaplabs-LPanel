@@ -23,7 +23,6 @@ const HEADMASTER_PROVIDER_LABEL = "Headmaster";
 const HEADMASTER_TIER_MODELS = Object.freeze([
   "headmaster-lite",
   "headmaster-pro",
-  "headmaster-max",
 ]);
 const HEADMASTER_DEFAULT_TIER = HEADMASTER_TIER_MODELS[0];
 const HEADMASTER_MANAGED_MARKER = "headmaster";

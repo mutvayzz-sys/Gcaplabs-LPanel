@@ -128,7 +128,6 @@ test("the exec writer applies the managed block and drops a leftover operator ke
     assert.deepEqual(Object.keys(config.providers.headmaster.models), [
       "headmaster-lite",
       "headmaster-pro",
-      "headmaster-max",
     ]);
     assert.ok(!JSON.stringify(config).includes("sk-operator-secret"));
   } finally {

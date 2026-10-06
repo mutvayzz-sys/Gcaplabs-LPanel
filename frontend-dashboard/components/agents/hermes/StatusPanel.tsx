@@ -419,25 +419,25 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Failed to sync Hermes LLM settings");
+        throw new Error(data.error || "Failed to sync Headmaster LLM settings");
       }
 
       const agentResult = Array.isArray(data.results)
         ? data.results.find((entry) => entry.agentId === agentId)
         : null;
       if (agentResult && agentResult.status !== "synced") {
-        throw new Error(agentResult.error || "Hermes sync failed");
+        throw new Error(agentResult.error || "Headmaster sync failed");
       }
       if ((data.synced || 0) < 1) {
-        throw new Error("Sync completed but Hermes was not updated");
+        throw new Error("Sync completed but Headmaster was not updated");
       }
 
-      toast.success("Hermes LLM settings synced");
+      toast.success("Headmaster LLM settings synced");
       window.setTimeout(() => {
         onRefresh?.();
       }, 3000);
     } catch (nextError) {
-      toast.error(nextError.message || "Failed to sync Hermes LLM settings");
+      toast.error(nextError.message || "Failed to sync Headmaster LLM settings");
     } finally {
       setSyncingKeys(false);
     }
@@ -445,7 +445,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
 
   async function handleApplySelection() {
     if (!selectedChoice?.rowId) {
-      toast.error("Select a saved provider/model before syncing Hermes");
+      toast.error("Select a saved provider/model before syncing Headmaster");
       return;
     }
 
@@ -469,19 +469,19 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
       });
       const syncData = await syncResponse.json().catch(() => ({}));
       if (!syncResponse.ok) {
-        throw new Error(syncData.error || "Failed to sync Hermes");
+        throw new Error(syncData.error || "Failed to sync Headmaster");
       }
 
       const agentResult = Array.isArray(syncData.results)
         ? syncData.results.find((entry) => entry.agentId === agentId)
         : null;
       if (agentResult && agentResult.status !== "synced") {
-        throw new Error(agentResult.error || "Hermes sync failed");
+        throw new Error(agentResult.error || "Headmaster sync failed");
       }
 
       await loadProviderChoices();
       toast.success(
-        `Hermes now uses ${selectedChoice.providerName} / ${formatModelLabel(
+        `Headmaster now uses ${selectedChoice.providerName} / ${formatModelLabel(
           selectedChoice.modelId,
         )}`,
       );
@@ -489,7 +489,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
         onRefresh?.();
       }, 3000);
     } catch (nextError) {
-      toast.error(nextError.message || "Failed to update Hermes model");
+      toast.error(nextError.message || "Failed to update Headmaster model");
     } finally {
       setChangingModel(false);
     }
@@ -509,9 +509,9 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
         <div className="flex items-start gap-3">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" />
           <div>
-            <p className="text-sm font-bold text-amber-800">Hermes runtime details unavailable</p>
+            <p className="text-sm font-bold text-amber-800">Headmaster runtime details unavailable</p>
             <p className="mt-1 text-xs text-amber-700">
-              {error || "The Hermes runtime has not reported status yet."}
+              {error || "The Headmaster runtime has not reported status yet."}
             </p>
             <button
               onClick={onRefresh}
@@ -531,7 +531,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
-            Hermes Status
+            Headmaster Status
           </p>
           <p className="mt-1 text-sm font-bold text-slate-900">
             Runtime health, configured provider/model, and messaging gateway status in one place.
@@ -620,7 +620,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
           <div className="border-b border-slate-200 px-4 py-3">
             <p className="text-sm font-bold text-slate-900">Runtime API</p>
             <p className="mt-1 text-xs text-slate-500">
-              Hermes exposes an OpenAI-compatible API surface for WebUI and direct requests.
+              Headmaster exposes an OpenAI-compatible API surface for WebUI and direct requests.
             </p>
           </div>
           <div className="space-y-3 p-4">
@@ -657,8 +657,8 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
                   {runtimeReady
-                    ? "Hermes reported a healthy runtime response."
-                    : runtimeInfo?.health?.error || "Hermes has not completed startup yet."}
+                    ? "Headmaster reported a healthy runtime response."
+                    : runtimeInfo?.health?.error || "Headmaster has not completed startup yet."}
                 </p>
               </div>
             </div>
@@ -675,7 +675,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
                   <p className="text-sm font-bold text-slate-900">Primary LLM</p>
                   <p className="mt-1 text-xs text-slate-500">
                     Pick a saved Nora provider/model to make it the default selection and push it
-                    into Hermes.
+                    into Headmaster.
                   </p>
                 </div>
               </div>
@@ -701,7 +701,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
                     No saved LLM provider available
                   </p>
                   <p className="mt-1 text-xs text-amber-700">
-                    Add a provider in Settings before changing the Hermes default model.
+                    Add a provider in Settings before changing the Headmaster default model.
                   </p>
                   <a
                     href="/settings"
@@ -739,7 +739,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
                       ) : (
                         <CheckCircle2 size={12} />
                       )}
-                      Apply to Hermes
+                      Apply to Headmaster
                     </button>
                   </div>
                   {modelChoices.unavailableProviders.length > 0 ? (
@@ -754,7 +754,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
               ) : (
                 <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center">
                   <p className="text-sm font-medium text-slate-600">
-                    Nora has saved providers, but none include a model Hermes can select yet.
+                    The control panel has saved providers, but none include a model Headmaster can select yet.
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     Save a model on the provider record in Settings, then return here to sync it.
@@ -788,7 +788,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-slate-500">
-                  No models reported yet. Hermes may still be starting or waiting for upstream auth.
+                  No models reported yet. Headmaster may still be starting or waiting for upstream auth.
                 </p>
               )}
             </div>
@@ -798,9 +798,9 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
         {connect ? (
           <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-4 py-3">
-              <p className="text-sm font-bold text-slate-900">Connect Hermes Desktop</p>
+              <p className="text-sm font-bold text-slate-900">Connect Headmaster Desktop</p>
               <p className="mt-1 text-xs text-slate-500">
-                Point Hermes Desktop (or any direct client) at this address. Reachable only on the
+                Point Headmaster Desktop (or any direct client) at this address. Reachable only on the
                 interface Nora publishes agent ports to (DOCKER_AGENT_BIND_IP).
               </p>
             </div>
@@ -847,7 +847,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
             <div className="border-b border-slate-200 px-4 py-3">
               <p className="text-sm font-bold text-slate-900">Messaging Gateway</p>
               <p className="mt-1 text-xs text-slate-500">
-                Hermes runtime snapshot for cron and communication channels.
+                Headmaster runtime snapshot for cron and communication channels.
               </p>
             </div>
             <div className="space-y-3 p-4">
@@ -878,7 +878,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
                     Pending Restart
                   </p>
                   <p className="mt-1 text-sm text-sky-800">
-                    Hermes requested a runtime restart while applying recent configuration.
+                    Headmaster requested a runtime restart while applying recent configuration.
                   </p>
                 </div>
               ) : null}
@@ -889,7 +889,7 @@ export default function HermesStatusPanel({ agentId, runtimeInfo, loading, error
             <div className="border-b border-slate-200 px-4 py-3">
               <p className="text-sm font-bold text-slate-900">Platform States</p>
               <p className="mt-1 text-xs text-slate-500">
-                Per-platform health as reported by Hermes.
+                Per-platform health as reported by Headmaster.
               </p>
             </div>
             <div className="p-4">

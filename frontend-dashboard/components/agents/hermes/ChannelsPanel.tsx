@@ -95,7 +95,7 @@ export default function HermesChannelsPanel({ agentId }) {
       const res = await fetchWithAuth(`/api/agents/${agentId}/hermes-ui/channels`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Failed to load Hermes channels");
+        throw new Error(data.error || "Failed to load Headmaster channels");
       }
 
       setPayload({
@@ -105,7 +105,7 @@ export default function HermesChannelsPanel({ agentId }) {
         directoryUpdatedAt: data?.directoryUpdatedAt || null,
       });
     } catch (nextError) {
-      setError(nextError.message || "Failed to load Hermes channels");
+      setError(nextError.message || "Failed to load Headmaster channels");
       setPayload({
         channels: [],
         availableTypes: [],
@@ -191,7 +191,7 @@ export default function HermesChannelsPanel({ agentId }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Failed to save Hermes channel");
+        throw new Error(data.error || "Failed to save Headmaster channel");
       }
 
       if (data?.payload) {
@@ -207,10 +207,10 @@ export default function HermesChannelsPanel({ agentId }) {
         await loadChannels();
       }
 
-      toast.success(editorMode === "create" ? "Channel saved to Hermes" : "Channel updated");
+      toast.success(editorMode === "create" ? "Channel saved to Headmaster" : "Channel updated");
       closeEditor();
     } catch (nextError) {
-      const message = nextError.message || "Failed to save Hermes channel";
+      const message = nextError.message || "Failed to save Headmaster channel";
       setError(message);
       toast.error(message);
     } finally {
@@ -228,7 +228,7 @@ export default function HermesChannelsPanel({ agentId }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Failed to delete Hermes channel");
+        throw new Error(data.error || "Failed to delete Headmaster channel");
       }
 
       setPayload({
@@ -239,7 +239,7 @@ export default function HermesChannelsPanel({ agentId }) {
       });
       toast.success("Channel removed");
     } catch (nextError) {
-      const message = nextError.message || "Failed to delete Hermes channel";
+      const message = nextError.message || "Failed to delete Headmaster channel";
       setError(message);
       toast.error(message);
     } finally {
@@ -258,7 +258,7 @@ export default function HermesChannelsPanel({ agentId }) {
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Failed to test Hermes channel");
+        throw new Error(data.error || "Failed to test Headmaster channel");
       }
 
       if (data.success) {
@@ -267,7 +267,7 @@ export default function HermesChannelsPanel({ agentId }) {
         toast.error(data.error || data.message || `${channel.name} test failed`);
       }
     } catch (nextError) {
-      const message = nextError.message || "Failed to test Hermes channel";
+      const message = nextError.message || "Failed to test Headmaster channel";
       setError(message);
       toast.error(message);
     } finally {
@@ -289,10 +289,10 @@ export default function HermesChannelsPanel({ agentId }) {
         <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
-              Hermes Channels
+              Headmaster Channels
             </p>
             <p className="mt-1 text-sm font-bold text-slate-900">
-              Configure Hermes-native communication platforms and inspect discovered targets.
+              Configure runtime-native communication platforms and inspect discovered targets.
             </p>
             <p className="mt-1 text-xs text-slate-500">
               Gateway snapshot updated{" "}
@@ -363,10 +363,10 @@ export default function HermesChannelsPanel({ agentId }) {
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
             <PlugZap size={24} className="mx-auto text-slate-300" />
             <p className="mt-3 text-sm font-bold text-slate-600">
-              No Hermes channels configured yet
+              No Headmaster channels configured yet
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Add a messaging platform to let Hermes send and receive messages outside the runtime.
+              Add a messaging platform to let Headmaster send and receive messages outside the runtime.
             </p>
           </div>
         ) : (
@@ -510,10 +510,10 @@ export default function HermesChannelsPanel({ agentId }) {
             <div className="flex items-center justify-between border-b border-slate-100 p-4">
               <div>
                 <p className="text-sm font-bold text-slate-900">
-                  {editorMode === "create" ? "Add Hermes Channel" : "Edit Hermes Channel"}
+                  {editorMode === "create" ? "Add Headmaster Channel" : "Edit Headmaster Channel"}
                 </p>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Hermes stores these settings in its runtime configuration and may restart after
+                  Headmaster stores these settings in its runtime configuration and may restart after
                   save.
                 </p>
               </div>

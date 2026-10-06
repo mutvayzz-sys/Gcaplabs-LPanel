@@ -31,7 +31,8 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 $ENV_FILE = ".env"
 $ENV_BACKUP_FILE = $null
-$NORA_GITHUB_REPO_SLUG = "solomon2773/nora"
+# Headmaster: empty so the admin panel never polls upstream Nora releases.
+$NORA_GITHUB_REPO_SLUG = ""
 $PUBLIC_NGINX_TEMPLATE = "infra/nginx_public.conf.template"
 $TLS_NGINX_TEMPLATE = "infra/nginx_tls.conf"
 $PUBLIC_PROD_COMPOSE_OVERRIDE_TEMPLATE = "infra/docker-compose.public-prod.yml"
@@ -1085,7 +1086,7 @@ function Update-SignupProtectionEnv {
     param([string]$EnvPath)
 
     $values = [ordered]@{
-        SIGNUP_ENABLED = (Read-EnvValue -EnvPath $EnvPath -Name "SIGNUP_ENABLED" -Default "true")
+        SIGNUP_ENABLED = (Read-EnvValue -EnvPath $EnvPath -Name "SIGNUP_ENABLED" -Default "false")
         SIGNUP_RATE_LIMIT_BURST_MAX = (Read-EnvValue -EnvPath $EnvPath -Name "SIGNUP_RATE_LIMIT_BURST_MAX" -Default "5")
         SIGNUP_RATE_LIMIT_BURST_WINDOW_MS = (Read-EnvValue -EnvPath $EnvPath -Name "SIGNUP_RATE_LIMIT_BURST_WINDOW_MS" -Default "600000")
         SIGNUP_RATE_LIMIT_DAILY_MAX = (Read-EnvValue -EnvPath $EnvPath -Name "SIGNUP_RATE_LIMIT_DAILY_MAX" -Default "20")
@@ -1921,9 +1922,17 @@ if ("$BACKEND_API_PORT" -ne "4100") {
 
 # ── Bootstrap Admin Account ──────────────────────────────────
 
+# Headmaster: public signup ships disabled (SIGNUP_ENABLED=false), so there is
+# no first-account claim page. The first admin is created explicitly here
+# (or via DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD in .env).
+$BOOTSTRAP_SIGNUP_ENABLED = Read-EnvValue -EnvPath $ENV_FILE -Name "SIGNUP_ENABLED" -Default "false"
+
 if ($PLATFORM_MODE -eq "paas") {
     Write-Header "Bootstrap Admin Account (Required for PaaS)"
     Write-Host "  Hosted PaaS requires an explicit bootstrap administrator."
+} elseif ($BOOTSTRAP_SIGNUP_ENABLED -ne "true") {
+    Write-Header "Bootstrap Admin Account (Required)"
+    Write-Host "  Public signup is disabled, so the first admin must be created here."
 } else {
     Write-Header "Bootstrap Admin Account (Optional)"
     Write-Host "  Leave both fields blank to claim the first admin after boot."
@@ -1937,6 +1946,10 @@ while ($true) {
     if (-not $adminEmailInput -and -not $adminPassInput) {
         if ($PLATFORM_MODE -eq "paas") {
             Write-Warn "Hosted PaaS cannot expose first-account admin claim. Configure the bootstrap administrator."
+            continue
+        }
+        if ($BOOTSTRAP_SIGNUP_ENABLED -ne "true") {
+            Write-Warn "Public signup is disabled (SIGNUP_ENABLED=false). Configure the bootstrap administrator."
             continue
         }
         $DEFAULT_ADMIN_EMAIL = ""
@@ -2055,7 +2068,7 @@ $REDIS_TLS_KEY = Read-EnvValue -EnvPath $ENV_FILE -Name "REDIS_TLS_KEY" -Default
 $REDIS_TLS_KEY_FILE = Read-EnvValue -EnvPath $ENV_FILE -Name "REDIS_TLS_KEY_FILE" -Default ""
 $REDIS_TLS_INSECURE_SKIP_VERIFY = Read-EnvValue -EnvPath $ENV_FILE -Name "REDIS_TLS_INSECURE_SKIP_VERIFY" -Default "false"
 $REDIS_CONNECT_TIMEOUT_MS = Read-EnvValue -EnvPath $ENV_FILE -Name "REDIS_CONNECT_TIMEOUT_MS" -Default "10000"
-$SIGNUP_ENABLED = Read-EnvValue -EnvPath $ENV_FILE -Name "SIGNUP_ENABLED" -Default "true"
+$SIGNUP_ENABLED = Read-EnvValue -EnvPath $ENV_FILE -Name "SIGNUP_ENABLED" -Default "false"
 $SIGNUP_RATE_LIMIT_BURST_MAX = Read-EnvValue -EnvPath $ENV_FILE -Name "SIGNUP_RATE_LIMIT_BURST_MAX" -Default "5"
 $SIGNUP_RATE_LIMIT_BURST_WINDOW_MS = Read-EnvValue -EnvPath $ENV_FILE -Name "SIGNUP_RATE_LIMIT_BURST_WINDOW_MS" -Default "600000"
 $SIGNUP_RATE_LIMIT_DAILY_MAX = Read-EnvValue -EnvPath $ENV_FILE -Name "SIGNUP_RATE_LIMIT_DAILY_MAX" -Default "20"
@@ -2222,6 +2235,9 @@ NORA_LATEST_PUBLISHED_AT=
 NORA_RELEASE_NOTES_URL=
 NORA_LATEST_SEVERITY=warning
 NORA_UPGRADE_REQUIRED=false
+# Headmaster: keep this false. Enabling it lets Admin Settings run a one-click
+# upgrade that checks out upstream Nora (NORA_UPGRADE_REPO) over this checkout,
+# replacing the Headmaster fork. Upgrade the fork via git + PR instead.
 NORA_AUTO_UPGRADE_ENABLED=false
 NORA_HOST_REPO_DIR=$(Get-Location)
 # Direct upgrades fetch this public HTTPS repo. Do not include credentials.

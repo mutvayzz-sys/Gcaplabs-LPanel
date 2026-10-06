@@ -35,7 +35,7 @@ const TRANSLATIONS = {
       "¿Eliminar {user}? Esto eliminara la cuenta y limpiara los agentes propios.",
     "{count}d": "{count}d",
 
-    "Nora Admin": "Admin de Nora",
+    "Headmaster Admin": "Admin de Headmaster",
     "Full platform control": "Control total de la plataforma",
     Overview: "Resumen",
     Fleet: "Flota",
@@ -51,8 +51,8 @@ const TRANSLATIONS = {
     "System Critical": "Sistema critico",
     "System Warning": "Advertencia del sistema",
     "Upgrade Required": "Actualizacion requerida",
-    "New Nora Version Available": "Nueva version de Nora disponible",
-    "A newer Nora release is available": "Hay una version mas reciente de Nora disponible",
+    "New Version Available": "Nueva version disponible",
+    "A newer release is available": "Hay una version mas reciente disponible",
     "Review upgrade": "Revisar actualizacion",
     "Release notes": "Notas de version",
     "Platform Overview": "Resumen de plataforma",
@@ -94,8 +94,8 @@ const TRANSLATIONS = {
       "Revisa la guia de actualizacion para elegir actualizacion de un clic o manual.",
     Members: "Miembros",
     "Multi-tenant RBAC": "RBAC multi-tenant",
-    "Read-only god view of every workspace, member, and role on this Nora installation.":
-      "Vista global de solo lectura de cada espacio de trabajo, miembro y rol de esta instalacion de Nora.",
+    "Read-only god view of every workspace, member, and role on this Headmaster Control installation.":
+      "Vista global de solo lectura de cada espacio de trabajo, miembro y rol de esta instalacion de Headmaster Control.",
     "Membership rows": "Filas de membresia",
     "Distinct users": "Usuarios distintos",
     "All workspaces": "Todos los espacios",
@@ -288,7 +288,7 @@ const TRANSLATIONS = {
       "Supprimer {user} ? Cela supprimera le compte et nettoiera les agents possedes.",
     "{count}d": "{count}j",
 
-    "Nora Admin": "Admin Nora",
+    "Headmaster Admin": "Admin Headmaster",
     "Full platform control": "Controle complet de la plateforme",
     Overview: "Vue d'ensemble",
     Fleet: "Flotte",
@@ -304,8 +304,8 @@ const TRANSLATIONS = {
     "System Critical": "Systeme critique",
     "System Warning": "Avertissement systeme",
     "Upgrade Required": "Mise a niveau requise",
-    "New Nora Version Available": "Nouvelle version de Nora disponible",
-    "A newer Nora release is available": "Une version plus recente de Nora est disponible",
+    "New Version Available": "Nouvelle version disponible",
+    "A newer release is available": "Une version plus recente est disponible",
     "Review upgrade": "Verifier la mise a niveau",
     "Release notes": "Notes de version",
     "Platform Overview": "Vue d'ensemble de la plateforme",
@@ -347,8 +347,8 @@ const TRANSLATIONS = {
       "Consultez les consignes de mise a niveau pour choisir l'option en un clic ou manuelle.",
     Members: "Membres",
     "Multi-tenant RBAC": "RBAC multi-locataires",
-    "Read-only god view of every workspace, member, and role on this Nora installation.":
-      "Vue globale en lecture seule de chaque espace, membre et role de cette installation Nora.",
+    "Read-only god view of every workspace, member, and role on this Headmaster Control installation.":
+      "Vue globale en lecture seule de chaque espace, membre et role de cette installation Headmaster Control.",
     "Membership rows": "Lignes d'adhesion",
     "Distinct users": "Utilisateurs distincts",
     "All workspaces": "Tous les espaces",
@@ -540,7 +540,7 @@ const TRANSLATIONS = {
       "删除 {user}？这将删除该账户并清理其拥有的代理。",
     "{count}d": "{count}天",
 
-    "Nora Admin": "Nora 管理",
+    "Headmaster Admin": "Headmaster 管理",
     "Full platform control": "完整平台控制",
     Overview: "概览",
     Fleet: "队伍",
@@ -556,8 +556,8 @@ const TRANSLATIONS = {
     "System Critical": "系统严重",
     "System Warning": "系统警告",
     "Upgrade Required": "需要升级",
-    "New Nora Version Available": "有新的 Nora 版本可用",
-    "A newer Nora release is available": "有更新的 Nora 版本可用",
+    "New Version Available": "有新版本可用",
+    "A newer release is available": "有更新的版本可用",
     "Review upgrade": "查看升级",
     "Release notes": "发行说明",
     "Platform Overview": "平台概览",
@@ -599,8 +599,8 @@ const TRANSLATIONS = {
       "查看升级指南，以选择一键升级或手动升级。",
     Members: "成员",
     "Multi-tenant RBAC": "多租户 RBAC",
-    "Read-only god view of every workspace, member, and role on this Nora installation.":
-      "对此 Nora 安装中每个工作区、成员和角色的只读全局视图。",
+    "Read-only god view of every workspace, member, and role on this Headmaster Control installation.":
+      "对此 Headmaster Control 安装中每个工作区、成员和角色的只读全局视图。",
     "Membership rows": "成员资格行",
     "Distinct users": "不同用户",
     "All workspaces": "所有工作区",
@@ -787,7 +787,7 @@ const TRANSLATIONS = {
       "刪除 {user}？這會移除該帳戶並清理其擁有的代理。",
     "{count}d": "{count}天",
 
-    "Nora Admin": "Nora 管理",
+    "Headmaster Admin": "Headmaster 管理",
     "Full platform control": "完整平台控制",
     Overview: "概覽",
     Fleet: "隊伍",
@@ -803,8 +803,8 @@ const TRANSLATIONS = {
     "System Critical": "系統嚴重",
     "System Warning": "系統警告",
     "Upgrade Required": "需要升級",
-    "New Nora Version Available": "有新的 Nora 版本可用",
-    "A newer Nora release is available": "有更新的 Nora 版本可用",
+    "New Version Available": "有新版本可用",
+    "A newer release is available": "有更新的版本可用",
     "Review upgrade": "查看升級",
     "Release notes": "發行說明",
     "Platform Overview": "平台概覽",
@@ -846,8 +846,8 @@ const TRANSLATIONS = {
       "查看升級指南，以選擇一鍵升級或手動升級。",
     Members: "成員",
     "Multi-tenant RBAC": "多租戶 RBAC",
-    "Read-only god view of every workspace, member, and role on this Nora installation.":
-      "對此 Nora 安裝中每個工作區、成員和角色的唯讀全域檢視。",
+    "Read-only god view of every workspace, member, and role on this Headmaster Control installation.":
+      "對此 Headmaster Control 安裝中每個工作區、成員和角色的唯讀全域檢視。",
     "Membership rows": "成員資格列",
     "Distinct users": "不同使用者",
     "All workspaces": "所有工作區",
