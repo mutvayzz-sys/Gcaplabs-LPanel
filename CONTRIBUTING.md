@@ -1,141 +1,75 @@
-# Contributing to Nora
+# Contributing to LPanel
 
-Thanks for contributing. Nora is the self-hosted AI agent ops platform, and useful contributions are not limited to code. Bug reports, docs fixes, testing improvements, runtime adapters, UX polish, and operational hardening all matter.
+LPanel is the Headmaster control plane (see the README). It is derived from an open-source platform that keeps its name in internal identifiers and licence notices only.
 
-By participating in this project, you agree to follow the [Code of Conduct](./CODE_OF_CONDUCT.md).
+This is the fix workflow for the Headmaster repositories. The full rule set is Part 5 of `audits/2026-10-05-full-product-audit/REPORT.md` in `gcaplabs-desktop`; this file is the part you need here.
 
-## Before You Start
+## 1. One worktree per fix
 
-- Read [CLAUDE.md](./CLAUDE.md) for the public architecture map, shared-code warnings, and service boundaries.
-- For install help, setup questions, or product discussion, use [SUPPORT.md](./SUPPORT.md) to choose the right path.
-- For substantial feature work or architectural changes, open an issue or discussion before investing in a large PR.
-- Do not commit secrets, customer data, local notes, or environment-specific operational material.
+Everything runs off `main`. There are no alpha or beta branches. Give each fix its own worktree and branch so work in progress never collides, and never use `git stash`.
 
-Nora is Apache-2.0 licensed. Unless you explicitly state otherwise, a contribution you intentionally submit for inclusion in Nora is provided under that same license. Nora does not currently require a separate contributor license agreement or DCO sign-off.
-
-## Good First Contribution Types
-
-Looking for a concrete starting point? Browse the [`good first issue`](https://github.com/solomon2773/nora/labels/good%20first%20issue) label — small, self-contained tasks with a clear done-state. More broadly, valuable contributions include:
-
-- Fix a reproducible bug
-- Improve onboarding or self-hosted docs
-- Add tests for an existing behavior
-- Tighten runtime, worker, or dashboard UX flows
-- Improve deployment ergonomics or local verification
-- Refine public architecture and support docs to match the product
-
-## Development Workflow
-
-1. Fork the repo and create a focused branch.
-2. Install the repository dependencies with `npm run contributor:setup`. Add `-- --scope backend-api` (or another scope listed by `npm run contributor:setup -- --help`) when you only need one subsystem.
-3. Make the smallest change that fully solves one problem.
-4. Run `npm run contributor:check`; it detects changed subsystems. Use `npm run contributor:check -- backend-api` for an explicit target or `-- all` before a broad PR.
-5. Update docs in the same change when behavior, setup, routes, or architecture changed.
-6. Open a pull request with a clear summary and validation notes.
-
-Start with the root [README](./README.md) for setup and common commands. Docker Compose is the default path for local development.
-
-You can also open the repository in a dev container. It includes Node 24 and Docker access and runs the same contributor bootstrap command when it is created.
-
-## Repo-Specific Expectations
-
-- Respect the service boundaries and shared-code warnings in [CLAUDE.md](./CLAUDE.md), especially `agent-runtime/` and `workers/provisioner/backends/`, which affect multiple services.
-- Keep changes within one subsystem where practical and call out every affected subsystem in the pull request.
-- If your change affects documented behavior, setup, routes, architecture, or data flow, update the corresponding tracked public docs in the same PR.
-- If your change affects public setup, deployment, routing, or architecture, update the relevant public docs in the same PR.
-- Do not mix unrelated refactors into a feature or bugfix PR.
-- Do not commit secrets, `.env` files, credentials, or customer data.
-- Do not open public issues for suspected vulnerabilities; follow [SECURITY.md](./SECURITY.md).
-
-## Extension Workflows
-
-Integration providers and deploy-target adapters have public scaffolders:
-
-```bash
-# API-key integration provider, catalog entry, focused test, docs stub, and smoke env entry
-npm run scaffold:integration -- \
-  --id acme --name "Acme" --primary-env ACME_API_KEY \
-  --test-url https://api.acme.example/v1/me
-
-# Provisioner adapter class and contract-test starter
-npm run scaffold:backend -- --id acme-cloud --name "Acme Cloud"
+```sh
+git fetch origin main
+git worktree add ../Gcaplabs-LPanel-<fix> -b <area>/<short-name> origin/main
+cd ../Gcaplabs-LPanel-<fix>
+# ... make the change, commit ...
+git push -u origin <area>/<short-name>
+# after the merge:
+cd - && git worktree remove ../Gcaplabs-LPanel-<fix>
 ```
 
-Read [the integration extension guide](./backend-api/integrations/README.md) or [the backend adapter guide](./workers/provisioner/backends/README.md) before running a scaffolder. Both commands refuse to overwrite existing files. A generated backend adapter is deliberately unregistered and fails closed until its lifecycle implementation and cross-subsystem wiring are complete.
+One pull request per fix, kept small enough to review in one sitting. Do not stack pull requests unless one truly needs the other, and say so in the body.
 
-## Issues, Discussions, and Pull Requests
+## 2. Upstream first
 
-Use GitHub Issues for:
+Before building anything, check how the platform LPanel is derived from, and Core's upstream, already do it, then port or adapt that in our design. No pull requests to upstream.
 
-- reproducible bugs
-- documentation errors
-- install failures with concrete steps and logs
 
-Use GitHub Discussions for:
+## 3. The brand gate
 
-- setup questions
-- architecture tradeoffs
-- product direction
-- implementation discussion before coding
+Nothing a customer or the bot can see says Hermes, Nous or Nora: UI text, bot replies and identity, errors, prompts, tool results, installers, the site, the iOS app, anything printed under the `headmaster` and `hm` commands. The product is Headmaster, the control plane is LPanel. Internal names stay as they are: paths such as `~/.hermes`, environment variable names, module, package, container and image names, wire header names, and the real `hermes` binary. Fix visible text, not plumbing.
 
-When opening a pull request:
+Every visible string in `admin-dashboard`, `frontend-dashboard` and `frontend-marketing` says LPanel or Headmaster control plane, never the old project name, and never Hermes or Nous. Keep internal identifiers (container, network and database names, API key prefixes, package names, file paths) and the licence notices as they are: change strings, not ids. Check your diff for new hits:
 
-- describe the user-visible or maintainer-visible change
-- list the commands, tests, or manual checks you ran
-- call out follow-up work or known limitations
-- keep screenshots or proof focused on the changed behavior
-
-The repo already includes a [pull request template](./.github/pull_request_template.md). Use it.
-
-## Validation
-
-Use the contributor runner for fast, repeatable validation:
-
-```bash
-npm run contributor:check                    # infer scopes from changed files
-npm run contributor:check -- integrations    # provider catalog + provider tests
-npm run contributor:check -- backend-adapters
-npm run contributor:check -- all             # all local unit/type checks
+```sh
+git diff origin/main -U0 | grep -i -E '^\+.*\b(nora|hermes|nous)\b'
+node --test scripts/headmaster/branding.test.mjs
 ```
 
-Live and infrastructure checks remain explicit because they need Docker, credentials, or a running stack:
+This repository has no pre-push hook yet; run the checks by hand, or install the desktop repository's installer with `--all` to cover the siblings that have one.
 
-```bash
-docker compose up -d
-docker compose logs -f backend-api
-cd e2e && npm run smoke:k8s-kind
+
+## 4. Tests
+
+GitHub Actions are not the gate (private repositories are out of minutes; workflows run manually until 1 November). Run the tests and lint for exactly what you changed, and paste the result in the pull request.
+
+`cd backend-api && npx jest path/to/file` for API changes; `cd admin-dashboard && npm run test:helpers && npm run typecheck` for the admin screens (the Remote Hosts copy lives in `lib/remoteHostTranslations.ts` and every key must exist in every non-English locale); `cd frontend-marketing && npm test`; `npm run contributor:check` to run the checks for the subsystems you changed.
+
+Re-read your own diff before you push. Ask what would make a reviewer or a test reject it.
+
+## 5. The pull request
+
+Open it as a draft, finish it, then merge it yourself. Merge everything that is finished; leave a pull request unmerged only while it is still being changed or when it would break `main`, and say why in one line. `agent-runtime/` and `workers/provisioner/backends/` are shared by `backend-api` and the worker: verify both consumers before you merge a change there. Update the nearest documentation in the same pull request when behaviour, routes or architecture change.
+
+Pull request body, in this order:
+
+```md
+**Before:** what a person sees or what breaks today, in plain words.
+
+**After:** what they see after this change.
+
+**How:** a short paragraph: what the change does and why this way.
+
+**Tests run:** the commands and their results.
+
+**Owner decisions:** anything you did not decide, with the options. "None" if none.
 ```
 
-If you could not run a relevant check, say so in the PR.
+No tracking labels in the opening lines, and never paste a secret, token, SSH user or server address into a body, comment or file.
 
-## Documentation
+## 6. What waits for the owner
 
-Public contributor-facing docs currently live at the repo root. Keep them aligned with the actual product:
-
-- [README.md](./README.md) for setup, features, and development entry points
-- [SUPPORT.md](./SUPPORT.md) for help and issue-routing
-- [SECURITY.md](./SECURITY.md) for private vulnerability reporting
-- [docs/concepts/architecture.mdx](./docs/concepts/architecture.mdx) for the public architecture narrative
-
-## Review Standards
-
-Nora is currently maintainer-led, so review capacity can vary. External Issues, ready-for-review pull
-requests, and Discussions receive an automated queue acknowledgement. Draft pull requests enter the
-response queue and start their clock only when marked ready. A scheduled check reminds the maintainer
-at twelve days without a human response and escalates when the fourteen-day target is exceeded.
-Maintainers aim to acknowledge a complete thread within fourteen days; this is a response target,
-not a guaranteed SLA, and the automated queue receipt is not a human review. If there has been no
-human response after fourteen days, one polite ping on the original thread is welcome. Please do not
-open duplicates to get attention.
-
-PRs move fastest when they are small, linked to an issue for substantial changes, include proof, and pass the targeted contributor check. Draft PRs are welcome for early architectural feedback; mark them ready only when the description and validation notes are complete.
-
-Maintainers may ask you to:
-
-- narrow the scope of a PR
-- add or update tests
-- move a discussion into the correct issue or docs surface
-- split unrelated code, docs, or product changes into focused PRs
-- update stale docs introduced by the change
-
-Contributions that are technically correct but ignore repo boundaries or documentation requirements may be sent back for revision.
+- Deploys, SSH, live settings and database changes: only with the owner's one-line approval naming the step, and a recorded rollback. Merging never deploys or migrates anything.
+- Cloudflare tunnel or DNS changes: prepare the exact line, the owner applies it.
+- Publishing a desktop build to the update feed, and anything on the site beyond a fix (copy, privacy and terms wording, design).
+- Rebuilding the dashboards (the frame-origin build argument) and moving the admin behind `headmaster.gcaplabs.com/admin` are server steps. Prepare the code and write the exact command as an owner step.
